@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Text Recolor — Preferences</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-header">
+      <div class="header-left">
+        <h1>Text Recolor</h1>
+        <span class="subtitle">Preferences</span>
+      </div>
+      <label class="toggle" title="Enable / disable globally">
+        <input type="checkbox" id="masterToggle" checked>
+        <span class="slider"></span>
+        <span class="toggle-label">Enabled</span>
+      </label>
+    </header>
+
+    <!-- ── pattern table ──────────────────────────────────────────────── -->
+    <section class="section">
+      <div class="section-header">
+        <h2>Patterns</h2>
+        <span id="patternCount" class="count-badge">0</span>
+      </div>
+
+      <div class="table-wrap">
+        <table id="patternTable">
+          <thead>
+            <tr>
+              <th class="col-color">Color</th>
+              <th class="col-text">Pattern</th>
+              <th class="col-preview">Preview</th>
+              <th class="col-flags">Flags</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody id="patternBody">
+            <!-- rows injected by JS -->
+          </tbody>
+        </table>
+        <div id="emptyState" class="empty-state">
+          No patterns defined yet. Add one below.
+        </div>
+      </div>
+    </section>
+
+    <!-- ── add / edit form ────────────────────────────────────────────── -->
+    <section class="section">
+      <h2 id="formTitle">Add pattern</h2>
+      <form id="patternForm" autocomplete="off">
+        <input type="hidden" id="editId">
+
+        <div class="form-grid">
+          <!-- Text input -->
+          <div class="field">
+            <label for="patternInput">Text / string</label>
+            <input
+              type="text"
+              id="patternInput"
+              placeholder="e.g. TODO, 404, #urgent…"
+              spellcheck="false"
+              required
+            >
+          </div>
+
+          <!-- Custom colour picker — no <input type="color"> to avoid browser crash -->
+          <div class="field field--color">
+            <label>Color</label>
+            <div class="clr-picker">
+              <div class="clr-sl" id="clrSL">
+                <div class="clr-cursor" id="clrCursor"></div>
+              </div>
+              <input type="range" class="clr-hue" id="clrHue" min="0" max="359" step="1" value="0">
+              <div class="clr-bottom">
+                <span class="clr-preview" id="clrPreview"></span>
+                <!-- Keep id="colorHex" so JS can still reference it as colorHexEl -->
+                <input type="text" class="clr-hex" id="colorHex"
+                       maxlength="7" spellcheck="false" placeholder="#rrggbb">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flags-row">
+          <label class="flag-label">
+            <input type="checkbox" id="caseSensitive">
+            <span>Case sensitive</span>
+          </label>
+          <label class="flag-label">
+            <input type="checkbox" id="wholeWord">
+            <span>Whole word only</span>
+          </label>
+        </div>
+
+        <div class="form-preview-row">
+          <span class="form-preview-label">Preview:</span>
+          <span id="formPreview" class="form-preview-text">sample text</span>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" id="submitBtn" class="btn btn--primary">Add pattern</button>
+          <button type="button" id="cancelBtn" class="btn btn--ghost" style="display:none">Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ── import / export ────────────────────────────────────────────── -->
+    <section class="section section--io">
+      <h2>Import / Export</h2>
+      <div class="io-row">
+        <button id="exportBtn" class="btn btn--ghost">Export JSON</button>
+        <label class="btn btn--ghost btn--file">
+          Import JSON
+          <input type="file" id="importFile" accept=".json" style="display:none">
+        </label>
+      </div>
+      <p id="ioStatus" class="io-status"></p>
+    </section>
+
+    <div id="toast" class="toast" aria-live="polite"></div>
+
+  </div><!-- .page -->
+  <script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+{
+  "manifest_version": 2,
+  "name": "Text Recolor",
+  "version": "1.1.0",
+  "description": "Recolor specific words, characters, or strings on any webpage.",
+
+  "permissions": [
+    "storage",
+    "activeTab",
+    "contextMenus",
+    "<all_urls>"
+  ],
+
+  "browser_action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Text Recolor"
+  },
+
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": false
+  },
+
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": false
+  },
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "{80b167e2-660f-4b27-9e79-dfcfa674df9f}"
+    }
+      
+  },
+  
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

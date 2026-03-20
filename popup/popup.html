@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Text Recolor</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <span class="title">Text Recolor</span>
+    <label class="toggle" title="Enable / disable">
+      <input type="checkbox" id="masterToggle" checked>
+      <span class="slider"></span>
+    </label>
+  </header>
+
+  <div id="patternList" class="pattern-list">
+    <!-- pattern rows injected by JS -->
+  </div>
+
+  <div id="emptyState" class="empty-state">
+    No patterns yet. Add one below.
+  </div>
+
+  <form id="addForm" class="add-form" autocomplete="off">
+    <div class="add-row">
+      <input
+        type="text"
+        id="patternInput"
+        class="pattern-input"
+        placeholder="Word, string, or number…"
+        spellcheck="false"
+        required
+      >
+      <!-- Custom colour swatch button — clicking toggles the inline picker -->
+      <button type="button" class="clr-swatch-btn" id="clrSwatchBtn" title="Pick a colour"></button>
+    </div>
+
+    <!-- Inline custom colour picker (no native dialog) -->
+    <div class="clr-panel" id="clrPanel" hidden>
+      <div class="clr-sl" id="clrSL">
+        <div class="clr-cursor" id="clrCursor"></div>
+      </div>
+      <input type="range" class="clr-hue" id="clrHue" min="0" max="359" step="1" value="0">
+      <div class="clr-bottom">
+        <span class="clr-preview" id="clrPreview"></span>
+        <input type="text" class="clr-hex" id="clrHex" maxlength="7"
+               spellcheck="false" placeholder="#rrggbb">
+      </div>
+    </div>
+
+    <div class="options-row">
+      <label class="opt-label">
+        <input type="checkbox" id="caseSensitive"> Case sensitive
+      </label>
+      <label class="opt-label">
+        <input type="checkbox" id="wholeWord"> Whole word
+      </label>
+    </div>
+    <button type="submit" class="btn-add">Add pattern</button>
+  </form>
+
+  <script src="popup.js"></script>
+</body>
+</html>

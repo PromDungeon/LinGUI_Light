@@ -1,0 +1,4 @@
+web-ext-artifacts/
+.amo-upload-uuid
+.web-extension-id
+.DS_Store
