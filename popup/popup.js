@@ -229,6 +229,25 @@ function onDelete(e) {
   renderPatterns();
 }
 
+// ─── theme ────────────────────────────────────────────────────────────────────
+
+const themeBtnEl  = document.getElementById('themeToggle');
+const THEME_KEY   = 'foxdye-theme';
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  themeBtnEl.textContent = theme === 'light' ? '☾' : '☀';
+  themeBtnEl.title       = theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode';
+  localStorage.setItem(THEME_KEY, theme);
+}
+
+applyTheme(localStorage.getItem(THEME_KEY) || 'dark');
+
+themeBtnEl.addEventListener('click', () => {
+  const current = document.documentElement.dataset.theme || 'dark';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+});
+
 // ─── init ─────────────────────────────────────────────────────────────────────
 
 browser.storage.local.get({ patterns: [], enabled: true }).then(data => {

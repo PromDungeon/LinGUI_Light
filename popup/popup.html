@@ -9,10 +9,13 @@
 <body>
   <header>
     <span class="title">FoxDye</span>
-    <label class="toggle" title="Enable / disable">
-      <input type="checkbox" id="masterToggle" checked>
-      <span class="slider"></span>
-    </label>
+    <div class="header-right">
+      <button type="button" id="themeToggle" class="btn-theme" title="Toggle light / dark mode">◑</button>
+      <label class="toggle" title="Enable / disable">
+        <input type="checkbox" id="masterToggle" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
   </header>
 
   <div id="patternList" class="pattern-list">
@@ -58,7 +61,7 @@
         <input type="checkbox" id="wholeWord"> Whole word
       </label>
     </div>
-    <button type="submit" class="btn-add">[ Acquire Target ]</button>
+    <button type="submit" class="btn-add">Add pattern</button>
   </form>
 
   <script src="popup.js"></script>

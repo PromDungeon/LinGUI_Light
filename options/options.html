@@ -14,11 +14,14 @@
         <h1>FoxDye</h1>
         <span class="subtitle">// Targeting Config</span>
       </div>
-      <label class="toggle" title="Enable / disable globally">
-        <input type="checkbox" id="masterToggle" checked>
-        <span class="slider"></span>
-        <span class="toggle-label">Enabled</span>
-      </label>
+      <div class="header-right">
+        <button type="button" id="themeToggle" class="btn-theme" title="Toggle light / dark mode">◑</button>
+        <label class="toggle" title="Enable / disable globally">
+          <input type="checkbox" id="masterToggle" checked>
+          <span class="slider"></span>
+          <span class="toggle-label">Enabled</span>
+        </label>
+      </div>
     </header>
 
     <!-- ── pattern table ──────────────────────────────────────────────── -->
@@ -103,7 +106,7 @@
         </div>
 
         <div class="form-actions">
-          <button type="submit" id="submitBtn" class="btn btn--primary">[ Acquire Target ]</button>
+          <button type="submit" id="submitBtn" class="btn btn--primary">Add pattern</button>
           <button type="button" id="cancelBtn" class="btn btn--ghost" style="display:none">Cancel</button>
         </div>
       </form>
