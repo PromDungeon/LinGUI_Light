@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LinGUI_Light</title>
+  <title>FoxDye</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <header>
-    <span class="title">LinGUI_Light</span>
+    <span class="title">FoxDye</span>
     <label class="toggle" title="Enable / disable">
       <input type="checkbox" id="masterToggle" checked>
       <span class="slider"></span>
@@ -20,7 +20,7 @@
   </div>
 
   <div id="emptyState" class="empty-state">
-    No patterns yet. Add one below.
+    -- No targets acquired --
   </div>
 
   <form id="addForm" class="add-form" autocomplete="off">
@@ -29,7 +29,7 @@
         type="text"
         id="patternInput"
         class="pattern-input"
-        placeholder="Word, string, or number…"
+        placeholder="Target string, word, or numeral..."
         spellcheck="false"
         required
       >
@@ -58,7 +58,7 @@
         <input type="checkbox" id="wholeWord"> Whole word
       </label>
     </div>
-    <button type="submit" class="btn-add">Add pattern</button>
+    <button type="submit" class="btn-add">[ Acquire Target ]</button>
   </form>
 
   <script src="popup.js"></script>

@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
-  "name": "LinGUI_Light",
-  "version": "1.2.0",
+  "name": "FoxDye",
+  "version": "1.2.1",
   "description": "Recolor specific words, characters, or strings on any webpage.",
 
   "permissions": [
@@ -21,7 +21,7 @@
 
   "browser_action": {
     "default_popup": "popup/popup.html",
-    "default_title": "LinGUI_Light",
+    "default_title": "FoxDye",
     "default_icon": {
       "16":  "icons/icon16.png",
       "32":  "icons/icon32.png",

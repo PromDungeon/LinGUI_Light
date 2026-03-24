@@ -160,6 +160,9 @@ function collectTextNodes(root) {
         // Skip inside tags we never touch
         if (SKIP_TAGS.has(el.tagName)) return NodeFilter.FILTER_REJECT;
 
+        // Skip inside contenteditable elements — modifying them resets the cursor
+        if (el.closest('[contenteditable]')) return NodeFilter.FILTER_REJECT;
+
         // Skip inside spans we already injected
         if (el.closest(`[${ATTR}]`)) return NodeFilter.FILTER_REJECT;
 
@@ -217,7 +220,9 @@ function startObserver() {
     if (processing || !enabled || !patterns.length) return;
     processing = true;
 
-    for (const { addedNodes } of mutations) {
+    for (const { addedNodes, target } of mutations) {
+      // Skip mutations inside contenteditable elements — reprocessing them resets the cursor
+      if (target.closest && target.closest('[contenteditable]')) continue;
       for (const node of addedNodes) {
         if (node.nodeType === Node.ELEMENT_NODE) {
           // Don't reprocess subtrees we already own
@@ -317,13 +322,13 @@ function showPicker(text) {
       .card {
         position: fixed;
         width: 276px;
-        background: #1f1f28;
-        border: 1px solid #3a3a48;
-        border-radius: 10px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.3);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #151a0d;
+        border: 1px solid #2e3820;
+        border-radius: 4px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.75), 0 0 0 1px #38c8a022;
+        font-family: "Courier New", Courier, monospace;
         font-size: 13px;
-        color: #e2e2ee;
+        color: #c8d4a0;
         overflow: hidden;
         pointer-events: all;
       }
@@ -333,42 +338,44 @@ function showPicker(text) {
         align-items: center;
         justify-content: space-between;
         padding: 10px 14px 9px;
-        background: #25252d;
-        border-bottom: 1px solid #3a3a48;
+        background: #0e0f08;
+        border-bottom: 1px solid #38c8a044;
       }
       .titlebar-text {
         font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 0.02em;
-        color: #c0c0d8;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #38c8a0;
       }
       .close-btn {
         background: none;
         border: none;
         cursor: pointer;
-        color: #666688;
+        color: #6a7a50;
         font-size: 16px;
         line-height: 1;
         padding: 0 2px;
-        border-radius: 3px;
+        border-radius: 2px;
         transition: color 0.15s;
       }
-      .close-btn:hover { color: #e2e2ee; }
+      .close-btn:hover { color: #cc2800; }
 
       .body { padding: 13px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
 
       /* preview */
       .preview {
-        background: #2a2a35;
-        border: 1px solid #3a3a48;
-        border-radius: 6px;
+        background: #0e0f08;
+        border: 1px solid #2e3820;
+        border-radius: 4px;
         padding: 7px 10px;
         font-size: 14px;
-        font-weight: 600;
+        font-weight: 700;
         word-break: break-all;
         min-height: 34px;
         display: flex;
         align-items: center;
+        letter-spacing: 0.04em;
       }
 
       /* color row */
@@ -379,38 +386,38 @@ function showPicker(text) {
       }
       .color-label {
         font-size: 11px;
-        font-weight: 600;
+        font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: #7878a0;
+        letter-spacing: 0.08em;
+        color: #6a7a50;
         flex-shrink: 0;
       }
       input[type="color"] {
         width: 36px;
         height: 32px;
         padding: 3px;
-        border: 1px solid #3a3a48;
-        border-radius: 6px;
-        background: #2a2a35;
+        border: 1px solid #2e3820;
+        border-radius: 4px;
+        background: #1c2212;
         cursor: pointer;
         flex-shrink: 0;
       }
       input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-      input[type="color"]::-webkit-color-swatch { border: none; border-radius: 3px; }
+      input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 
       .hex-input {
         flex: 1;
-        background: #2a2a35;
-        border: 1px solid #3a3a48;
-        border-radius: 6px;
-        color: #e2e2ee;
-        font-family: "SF Mono", "Fira Mono", Consolas, monospace;
+        background: #1c2212;
+        border: 1px solid #2e3820;
+        border-radius: 4px;
+        color: #c8d4a0;
+        font-family: "Courier New", Courier, monospace;
         font-size: 12px;
         padding: 6px 8px;
         outline: none;
         transition: border-color 0.15s;
       }
-      .hex-input:focus { border-color: #7b6ef6; }
+      .hex-input:focus { border-color: #38c8a0; }
 
       /* checkboxes */
       .opts { display: flex; gap: 14px; }
@@ -420,43 +427,45 @@ function showPicker(text) {
         gap: 6px;
         cursor: pointer;
         font-size: 12px;
-        color: #7878a0;
+        color: #6a7a50;
         user-select: none;
       }
-      .opt-label:hover { color: #e2e2ee; }
-      .opt-label input { accent-color: #7b6ef6; cursor: pointer; }
+      .opt-label:hover { color: #c8d4a0; }
+      .opt-label input { accent-color: #38c8a0; cursor: pointer; }
 
       /* buttons */
       .btns { display: flex; gap: 7px; }
       .btn {
         flex: 1;
-        border-radius: 6px;
+        border-radius: 4px;
         border: 1px solid transparent;
         cursor: pointer;
-        font-family: inherit;
+        font-family: "Courier New", Courier, monospace;
         font-size: 12px;
-        font-weight: 600;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
         padding: 7px 0;
         transition: opacity 0.15s, background 0.15s;
       }
       .btn:active { transform: scale(0.97); }
       .btn-add {
-        background: #7b6ef6;
-        color: #fff;
-        border-color: #7b6ef6;
+        background: #38c8a0;
+        color: #0e0f08;
+        border-color: #38c8a0;
       }
-      .btn-add:hover { background: #9585ff; border-color: #9585ff; }
+      .btn-add:hover { background: #4eddb8; border-color: #4eddb8; }
       .btn-cancel {
         background: transparent;
-        color: #7878a0;
-        border-color: #3a3a48;
+        color: #6a7a50;
+        border-color: #2e3820;
       }
-      .btn-cancel:hover { color: #e2e2ee; border-color: #7878a0; background: #2a2a35; }
+      .btn-cancel:hover { color: #c8d4a0; border-color: #6a7a50; background: #1c2212; }
     </style>
 
     <div class="card" id="card">
       <div class="titlebar">
-        <span class="titlebar-text">Add to Text Recolor</span>
+        <span class="titlebar-text">Add to FoxDye</span>
         <button class="close-btn" id="closeBtn" title="Close">×</button>
       </div>
       <div class="body">

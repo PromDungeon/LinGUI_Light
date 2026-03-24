@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"from PIL import Image; print\\(''PIL available''\\)\")",
+      "Bash(python3 -c \"import cairosvg; print\\(''cairosvg available''\\)\")",
+      "Bash(python3 -c \"import struct, zlib, base64; print\\(''stdlib ok''\\)\")",
+      "Bash(node -e \"console.log\\(''node ok''\\)\")",
+      "Bash(python3 gen_icons.py)",
+      "Bash(python3 -c \":*)",
+      "Bash(pip3 install:*)",
+      "Bash(sips --version)"
+    ]
+  }
+}
