@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ui-preview",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8471", "--directory", "/private/tmp/claude-501/-Users-billketchum-Claude-css-injector/196f68cd-6abc-448f-8bd0-e48ec336ecde/scratchpad/preview"],
+      "port": 8471
+    }
+  ]
+}
