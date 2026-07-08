@@ -16,7 +16,7 @@ const SKIP_TAGS = new Set([
   'SVG', 'MATH'
 ]);
 
-let patterns    = [];   // [{ id, text, color, caseSensitive, wholeWord }]
+let patterns    = [];   // [{ id, text, color, caseSensitive, wholeWord, isRegex }]
 let enabled     = true;
 let mutObserver = null;
 let processing  = false;
@@ -34,38 +34,15 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;');
 }
 
-/** Build a single RegExp that matches any of the active patterns. */
-function buildRegex(patternList) {
-  if (!patternList.length) return null;
-
-  // We combine all patterns into one alternation so we make a single pass.
-  // Each pattern gets a named-style capture group index so we can map a
-  // match back to its color.  We use numbered groups via the index.
-  const parts = patternList.map((p, i) => {
-    let src = escapeRegex(p.text);
-    if (p.wholeWord) src = `\\b${src}\\b`;
-    // Wrap in a capturing group
-    return `(${src})`;
-  });
-
-  // Use case-insensitive if ANY pattern is case-insensitive is too coarse;
-  // instead we keep per-pattern flags by handling them in buildPerPatternRegexes.
-  // This combined regex is only used for the fast "does any pattern match?" check;
-  // actual replacement uses per-pattern regexes.
-  try {
-    return new RegExp(parts.join('|'), 'gi');
-  } catch {
-    return null;
-  }
-}
-
 /** Build an array of { regex, color } objects, one per active pattern. */
 function buildPatternRegexes(patternList) {
   return patternList
     .filter(p => p.text && p.text.length > 0)
     .map(p => {
-      let src = escapeRegex(p.text);
-      if (p.wholeWord) src = `\\b${src}\\b`;
+      // Regex patterns are compiled as-is; whole-word only applies to
+      // literal patterns (regex authors write their own \b).
+      let src = p.isRegex ? p.text : escapeRegex(p.text);
+      if (p.wholeWord && !p.isRegex) src = `\\b${src}\\b`;
       const flags = p.caseSensitive ? 'g' : 'gi';
       try {
         return { regex: new RegExp(src, flags), color: p.color, id: p.id };
@@ -90,6 +67,12 @@ function buildReplacedHtml(text, patternRegexes) {
     regex.lastIndex = 0;
     let m;
     while ((m = regex.exec(text)) !== null) {
+      // A regex like \d* can match the empty string; skip it and advance
+      // manually or exec() would loop forever on the same position.
+      if (m[0].length === 0) {
+        regex.lastIndex++;
+        continue;
+      }
       matches.push({
         start: m.index,
         end:   m.index + m[0].length,
@@ -319,16 +302,17 @@ function showPicker(text) {
 
       :host { all: initial; }
 
+      /* "Graphite" skin — machined dark plates, ember-orange accents */
       .card {
         position: fixed;
         width: 276px;
-        background: #151a0d;
-        border: 1px solid #2e3820;
-        border-radius: 4px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.75), 0 0 0 1px #38c8a022;
-        font-family: "Courier New", Courier, monospace;
+        background: linear-gradient(180deg, #2b2c31, #1f2024);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 14px;
+        box-shadow: 0 14px 36px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06);
+        font-family: "DIN Alternate", "Bahnschrift", "Franklin Gothic Medium", "Segoe UI", sans-serif;
         font-size: 13px;
-        color: #c8d4a0;
+        color: #d8d8dc;
         overflow: hidden;
         pointer-events: all;
       }
@@ -338,44 +322,51 @@ function showPicker(text) {
         align-items: center;
         justify-content: space-between;
         padding: 10px 14px 9px;
-        background: #0e0f08;
-        border-bottom: 1px solid #38c8a044;
+        background: rgba(0,0,0,0.25);
+        border-bottom: 1px solid rgba(255,255,255,0.07);
       }
       .titlebar-text {
         font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: #38c8a0;
+        font-weight: 800;
+        letter-spacing: 0.03em;
+        color: #d8d8dc;
+      }
+      .titlebar-text::before {
+        content: '●';
+        color: #ff7a2f;
+        font-size: 8px;
+        margin-right: 6px;
+        vertical-align: 2px;
       }
       .close-btn {
         background: none;
         border: none;
         cursor: pointer;
-        color: #6a7a50;
+        color: #8b8c95;
         font-size: 16px;
         line-height: 1;
         padding: 0 2px;
-        border-radius: 2px;
+        border-radius: 4px;
         transition: color 0.15s;
       }
-      .close-btn:hover { color: #cc2800; }
+      .close-btn:hover { color: #ff5c5c; }
 
       .body { padding: 13px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
 
-      /* preview */
+      /* preview — inset well */
       .preview {
-        background: #0e0f08;
-        border: 1px solid #2e3820;
-        border-radius: 4px;
+        background: #1a1b1f;
+        border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 7px;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.4);
         padding: 7px 10px;
         font-size: 14px;
         font-weight: 700;
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
         word-break: break-all;
         min-height: 34px;
         display: flex;
         align-items: center;
-        letter-spacing: 0.04em;
       }
 
       /* color row */
@@ -385,39 +376,41 @@ function showPicker(text) {
         gap: 8px;
       }
       .color-label {
-        font-size: 11px;
-        font-weight: 700;
+        font-size: 10px;
+        font-weight: 800;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #6a7a50;
+        letter-spacing: 0.06em;
+        color: #8b8c95;
         flex-shrink: 0;
       }
       input[type="color"] {
         width: 36px;
         height: 32px;
         padding: 3px;
-        border: 1px solid #2e3820;
-        border-radius: 4px;
-        background: #1c2212;
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 7px;
+        background: linear-gradient(180deg, #2f3035, #26272c);
         cursor: pointer;
         flex-shrink: 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06);
       }
       input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-      input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
+      input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
 
       .hex-input {
         flex: 1;
-        background: #1c2212;
-        border: 1px solid #2e3820;
-        border-radius: 4px;
-        color: #c8d4a0;
-        font-family: "Courier New", Courier, monospace;
+        background: #1a1b1f;
+        border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 7px;
+        color: #d8d8dc;
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
         font-size: 12px;
         padding: 6px 8px;
         outline: none;
         transition: border-color 0.15s;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.4);
       }
-      .hex-input:focus { border-color: #38c8a0; }
+      .hex-input:focus { border-color: rgba(255,122,47,0.35); }
 
       /* checkboxes */
       .opts { display: flex; gap: 14px; }
@@ -426,41 +419,41 @@ function showPicker(text) {
         align-items: center;
         gap: 6px;
         cursor: pointer;
-        font-size: 12px;
-        color: #6a7a50;
+        font-size: 11px;
+        font-weight: 600;
+        color: #8b8c95;
         user-select: none;
       }
-      .opt-label:hover { color: #c8d4a0; }
-      .opt-label input { accent-color: #38c8a0; cursor: pointer; }
+      .opt-label:hover { color: #d8d8dc; }
+      .opt-label input { accent-color: #ff7a2f; cursor: pointer; }
 
       /* buttons */
       .btns { display: flex; gap: 7px; }
       .btn {
         flex: 1;
-        border-radius: 4px;
-        border: 1px solid transparent;
+        border-radius: 7px;
+        border: 1px solid rgba(255,255,255,0.08);
         cursor: pointer;
-        font-family: "Courier New", Courier, monospace;
+        font-family: "DIN Alternate", "Bahnschrift", "Franklin Gothic Medium", "Segoe UI", sans-serif;
         font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        padding: 7px 0;
-        transition: opacity 0.15s, background 0.15s;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        padding: 8px 0;
+        transition: color 0.15s, box-shadow 0.15s;
       }
-      .btn:active { transform: scale(0.97); }
+      .btn:active { transform: translateY(1px); }
       .btn-add {
-        background: #38c8a0;
-        color: #0e0f08;
-        border-color: #38c8a0;
+        background: linear-gradient(180deg, #35363c, #232428);
+        color: #ff8b47;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -2px 3px rgba(0,0,0,0.25);
       }
-      .btn-add:hover { background: #4eddb8; border-color: #4eddb8; }
+      .btn-add:hover { color: #ff9d5c; }
+      .btn-add:active { box-shadow: inset 0 2px 4px rgba(0,0,0,0.4); }
       .btn-cancel {
         background: transparent;
-        color: #6a7a50;
-        border-color: #2e3820;
+        color: #8b8c95;
       }
-      .btn-cancel:hover { color: #c8d4a0; border-color: #6a7a50; background: #1c2212; }
+      .btn-cancel:hover { color: #d8d8dc; border-color: rgba(255,255,255,0.2); }
     </style>
 
     <div class="card" id="card">

@@ -85,6 +85,11 @@
                 <input type="text" class="clr-hex" id="colorHex"
                        maxlength="7" spellcheck="false" placeholder="#rrggbb">
               </div>
+              <div class="pal-row">
+                <select id="palSelect" class="pal-select" title="Color palette"></select>
+                <button type="button" id="palDeleteBtn" class="btn-icon danger" title="Delete this custom palette" hidden>Delete</button>
+              </div>
+              <div class="pal-swatches" id="palSwatches"></div>
             </div>
           </div>
         </div>
@@ -97,6 +102,10 @@
           <label class="flag-label">
             <input type="checkbox" id="wholeWord">
             <span>Whole word only</span>
+          </label>
+          <label class="flag-label" title="Treat the pattern as a regular expression, e.g. \b\d{6}\b">
+            <input type="checkbox" id="isRegex">
+            <span>Regular expression</span>
           </label>
         </div>
 
@@ -112,6 +121,71 @@
       </form>
     </section>
 
+    <!-- ── bulk add ───────────────────────────────────────────────────── -->
+    <section class="section">
+      <h2>Bulk add</h2>
+      <p class="bulk-hint">
+        Paste multiple entries at once, or load them from a CSV / text file.
+        An entry may end with <code>,#rrggbb</code> to set its own color.
+      </p>
+      <form id="bulkForm" autocomplete="off">
+        <textarea
+          id="bulkInput"
+          class="bulk-input"
+          rows="6"
+          spellcheck="false"
+          placeholder="123456&#10;TODO,#ff9f1a&#10;error"
+        ></textarea>
+
+        <div class="bulk-controls">
+          <div class="field">
+            <label for="bulkSep">Separator</label>
+            <select id="bulkSep">
+              <option value="newline" selected>New line</option>
+              <option value="comma">Comma</option>
+              <option value="semicolon">Semicolon</option>
+              <option value="tab">Tab</option>
+              <option value="custom">Custom…</option>
+            </select>
+          </div>
+          <div class="field" id="bulkCustomSepField" hidden>
+            <label for="bulkCustomSep">Custom separator</label>
+            <input type="text" id="bulkCustomSep" maxlength="8" placeholder="|">
+          </div>
+          <div class="field">
+            <label for="bulkColorMode">Color assignment</label>
+            <select id="bulkColorMode">
+              <option value="picker" selected>Current picker color</option>
+              <option value="palette">Cycle active palette</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flags-row">
+          <label class="flag-label">
+            <input type="checkbox" id="bulkCaseSensitive">
+            <span>Case sensitive</span>
+          </label>
+          <label class="flag-label">
+            <input type="checkbox" id="bulkWholeWord">
+            <span>Whole word only</span>
+          </label>
+          <label class="flag-label" title="Treat each entry as a regular expression">
+            <input type="checkbox" id="bulkIsRegex">
+            <span>Regular expressions</span>
+          </label>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" id="bulkAddBtn" class="btn btn--primary">Add all</button>
+          <label class="btn btn--ghost btn--file">
+            Load CSV / TXT
+            <input type="file" id="bulkFile" accept=".csv,.txt" style="display:none">
+          </label>
+        </div>
+      </form>
+    </section>
+
     <!-- ── import / export ────────────────────────────────────────────── -->
     <section class="section section--io">
       <h2>Import / Export</h2>
@@ -121,6 +195,10 @@
           Import JSON
           <input type="file" id="importFile" accept=".json" style="display:none">
         </label>
+        <label class="btn btn--ghost btn--file" title='Palette JSON: {"name": "My palette", "colors": ["#ff0000", "#00ff00"]} — or an array of palettes'>
+          Import palette
+          <input type="file" id="importPaletteFile" accept=".json" style="display:none">
+        </label>
       </div>
       <p id="ioStatus" class="io-status"></p>
     </section>
@@ -128,6 +206,7 @@
     <div id="toast" class="toast" aria-live="polite"></div>
 
   </div><!-- .page -->
+  <script src="../common/palettes.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

@@ -9,6 +9,9 @@ const addFormEl      = document.getElementById('addForm');
 const patternInputEl = document.getElementById('patternInput');
 const caseSensEl     = document.getElementById('caseSensitive');
 const wholeWordEl    = document.getElementById('wholeWord');
+const isRegexEl      = document.getElementById('isRegex');
+const submitBtnEl    = document.getElementById('submitBtn');
+const cancelEditEl   = document.getElementById('cancelEditBtn');
 
 // ─── custom colour picker (replaces <input type="color"> to avoid browser crash) ──
 
@@ -126,10 +129,20 @@ clrSL.addEventListener('mousedown', e => {
 // Initialise picker to the default colour
 cpSetHex('#ff4d4d');
 
+// ── palette swatches (shared module: common/palettes.js) ──────────────────────
+
+const paletteUI = initPaletteUI({
+  selectEl:   document.getElementById('palSelect'),
+  swatchesEl: document.getElementById('palSwatches'),
+  onPick:     hex => cpSetHex(hex)
+});
+paletteUI.refresh();
+
 // ─── state ────────────────────────────────────────────────────────────────────
 
-let patterns = [];
-let enabled  = true;
+let patterns  = [];
+let enabled   = true;
+let editingId = null;   // id of the pattern loaded into the form, or null when adding
 
 function nextId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -178,6 +191,18 @@ function renderPatterns() {
       t.className = 'tag'; t.textContent = '\\b'; t.title = 'Whole word';
       tags.appendChild(t);
     }
+    if (p.isRegex) {
+      const t = document.createElement('span');
+      t.className = 'tag'; t.textContent = '.*'; t.title = 'Regular expression';
+      tags.appendChild(t);
+    }
+
+    const edit = document.createElement('button');
+    edit.className   = 'btn-edit';
+    edit.title       = 'Edit';
+    edit.textContent = '✎';
+    edit.dataset.id  = p.id;
+    edit.addEventListener('click', onEdit);
 
     const del = document.createElement('button');
     del.className   = 'btn-delete';
@@ -186,7 +211,7 @@ function renderPatterns() {
     del.dataset.id  = p.id;
     del.addEventListener('click', onDelete);
 
-    row.append(swatch, label, tags, del);
+    row.append(swatch, label, tags, edit, del);
     patternListEl.appendChild(row);
   }
 }
@@ -198,33 +223,90 @@ masterToggleEl.addEventListener('change', () => {
   save();
 });
 
+// Whole-word doesn't apply to regex patterns (write your own \b)
+isRegexEl.addEventListener('change', () => {
+  wholeWordEl.disabled = isRegexEl.checked;
+  if (isRegexEl.checked) wholeWordEl.checked = false;
+});
+
+// Clear any "invalid regex" error as soon as the pattern is edited
+patternInputEl.addEventListener('input', () => {
+  patternInputEl.setCustomValidity('');
+});
+
 addFormEl.addEventListener('submit', e => {
   e.preventDefault();
 
   const text = patternInputEl.value.trim();
   if (!text) return;
 
-  patterns.push({
-    id:            nextId(),
+  if (isRegexEl.checked) {
+    try {
+      new RegExp(text);
+    } catch (err) {
+      patternInputEl.setCustomValidity(`Invalid regex: ${err.message}`);
+      patternInputEl.reportValidity();
+      return;
+    }
+  }
+
+  const entry = {
+    id:            editingId ?? nextId(),
     text,
     color:         hsvToHex(cpH, cpS, cpV),
     caseSensitive: caseSensEl.checked,
-    wholeWord:     wholeWordEl.checked
-  });
+    wholeWord:     wholeWordEl.checked,
+    isRegex:       isRegexEl.checked
+  };
+
+  if (editingId) {
+    const idx = patterns.findIndex(p => p.id === editingId);
+    if (idx !== -1) patterns[idx] = entry;
+  } else {
+    patterns.push(entry);
+  }
 
   save();
   renderPatterns();
+  resetForm();
+});
 
+function resetForm() {
+  editingId            = null;
   patternInputEl.value = '';
   caseSensEl.checked   = false;
   wholeWordEl.checked  = false;
+  isRegexEl.checked    = false;
+  wholeWordEl.disabled = false;
+  submitBtnEl.textContent = 'Add pattern';
+  cancelEditEl.hidden  = true;
   clrPanel.setAttribute('hidden', '');
+  patternInputEl.setCustomValidity('');
   patternInputEl.focus();
-});
+}
+
+function onEdit(e) {
+  const p = patterns.find(x => x.id === e.currentTarget.dataset.id);
+  if (!p) return;
+
+  editingId            = p.id;
+  patternInputEl.value = p.text;
+  caseSensEl.checked   = p.caseSensitive;
+  wholeWordEl.checked  = p.wholeWord;
+  isRegexEl.checked    = !!p.isRegex;
+  wholeWordEl.disabled = !!p.isRegex;
+  cpSetHex(p.color);
+  submitBtnEl.textContent = 'Save changes';
+  cancelEditEl.hidden  = false;
+  patternInputEl.focus();
+}
+
+cancelEditEl.addEventListener('click', resetForm);
 
 function onDelete(e) {
   const id = e.currentTarget.dataset.id;
   patterns = patterns.filter(p => p.id !== id);
+  if (editingId === id) resetForm();
   save();
   renderPatterns();
 }

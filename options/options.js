@@ -14,6 +14,7 @@ const editIdEl       = document.getElementById('editId');
 const patternInputEl = document.getElementById('patternInput');
 const caseSensEl     = document.getElementById('caseSensitive');
 const wholeWordEl    = document.getElementById('wholeWord');
+const isRegexEl      = document.getElementById('isRegex');
 const formPreviewEl  = document.getElementById('formPreview');
 const submitBtnEl    = document.getElementById('submitBtn');
 const cancelBtnEl    = document.getElementById('cancelBtn');
@@ -133,6 +134,38 @@ clrSL.addEventListener('mousedown', e => {
   document.addEventListener('mouseup',   up);
 });
 
+// ── palette swatches (shared module: common/palettes.js) ──────────────────────
+
+const palSelectEl    = document.getElementById('palSelect');
+const palDeleteBtnEl = document.getElementById('palDeleteBtn');
+
+const paletteUI = initPaletteUI({
+  selectEl:   palSelectEl,
+  swatchesEl: document.getElementById('palSwatches'),
+  onPick:     hex => cpSetHex(hex)
+});
+
+// The Delete button only applies to custom palettes
+function updatePalDeleteBtn() {
+  palDeleteBtnEl.hidden = paletteUI.getActive()?.builtin !== false;
+}
+
+palSelectEl.addEventListener('change', updatePalDeleteBtn);
+
+palDeleteBtnEl.addEventListener('click', () => {
+  const pal = paletteUI.getActive();
+  if (!pal || pal.builtin) return;
+  browser.storage.local.get({ customPalettes: [] }).then(data => {
+    const remaining = data.customPalettes.filter(p => p.name !== pal.name);
+    return browser.storage.local.set({ customPalettes: remaining });
+  }).then(() => paletteUI.refresh()).then(() => {
+    updatePalDeleteBtn();
+    showToast(`Palette "${pal.name}" deleted.`);
+  });
+});
+
+paletteUI.refresh().then(updatePalDeleteBtn);
+
 // ─── state ────────────────────────────────────────────────────────────────────
 
 let patterns = [];
@@ -208,6 +241,7 @@ function renderTable() {
     const chips   = [];
     if (p.caseSensitive) chips.push('<span class="chip" title="Case sensitive">Aa</span>');
     if (p.wholeWord)     chips.push('<span class="chip" title="Whole word">\\b</span>');
+    if (p.isRegex)       chips.push('<span class="chip" title="Regular expression">.*</span>');
     tdFlags.innerHTML = `<div class="flag-chips">${chips.join('')}</div>`;
 
     // actions
@@ -239,6 +273,8 @@ function resetForm() {
   patternInputEl.value  = '';
   caseSensEl.checked    = false;
   wholeWordEl.checked   = false;
+  isRegexEl.checked     = false;
+  wholeWordEl.disabled  = false;
   formTitleEl.textContent   = 'Add pattern';
   submitBtnEl.textContent   = 'Add pattern';
   cancelBtnEl.style.display = 'none';
@@ -253,6 +289,8 @@ function startEdit(id) {
   patternInputEl.value = p.text;
   caseSensEl.checked   = p.caseSensitive;
   wholeWordEl.checked  = p.wholeWord;
+  isRegexEl.checked    = !!p.isRegex;
+  wholeWordEl.disabled = !!p.isRegex;
   formTitleEl.textContent   = 'Edit pattern';
   submitBtnEl.textContent   = 'Save changes';
   cancelBtnEl.style.display = '';
@@ -271,7 +309,16 @@ function deletePattern(id) {
 
 // ─── form submit ──────────────────────────────────────────────────────────────
 
-patternInputEl.addEventListener('input', updatePreview);
+patternInputEl.addEventListener('input', () => {
+  patternInputEl.setCustomValidity('');
+  updatePreview();
+});
+
+// Whole-word doesn't apply to regex patterns (write your own \b)
+isRegexEl.addEventListener('change', () => {
+  wholeWordEl.disabled = isRegexEl.checked;
+  if (isRegexEl.checked) wholeWordEl.checked = false;
+});
 
 patternFormEl.addEventListener('submit', e => {
   e.preventDefault();
@@ -280,16 +327,32 @@ patternFormEl.addEventListener('submit', e => {
   const color = cpGetHex();
   if (!text) return;
 
+  if (isRegexEl.checked) {
+    try {
+      new RegExp(text);
+    } catch (err) {
+      patternInputEl.setCustomValidity(`Invalid regex: ${err.message}`);
+      patternInputEl.reportValidity();
+      return;
+    }
+  }
+
+  const flags = {
+    caseSensitive: caseSensEl.checked,
+    wholeWord:     wholeWordEl.checked,
+    isRegex:       isRegexEl.checked
+  };
+
   const id = editIdEl.value;
 
   if (id) {
     const idx = patterns.findIndex(p => p.id === id);
     if (idx !== -1) {
-      patterns[idx] = { id, text, color, caseSensitive: caseSensEl.checked, wholeWord: wholeWordEl.checked };
+      patterns[idx] = { id, text, color, ...flags };
     }
     showToast('Pattern updated.');
   } else {
-    patterns.push({ id: nextId(), text, color, caseSensitive: caseSensEl.checked, wholeWord: wholeWordEl.checked });
+    patterns.push({ id: nextId(), text, color, ...flags });
     showToast('Pattern added.');
   }
 
@@ -342,7 +405,8 @@ importFileEl.addEventListener('change', e => {
         text:          p.text,
         color:         p.color,
         caseSensitive: !!p.caseSensitive,
-        wholeWord:     !!p.wholeWord
+        wholeWord:     !!p.wholeWord,
+        isRegex:       !!p.isRegex
       }));
 
       if (!valid.length) throw new Error('No valid patterns found.');
@@ -360,6 +424,178 @@ importFileEl.addEventListener('change', e => {
       setIoStatus(`Import failed: ${err.message}`, 'error');
     }
     importFileEl.value = '';
+  };
+  reader.readAsText(file);
+});
+
+// ─── bulk add ─────────────────────────────────────────────────────────────────
+
+const bulkFormEl      = document.getElementById('bulkForm');
+const bulkInputEl     = document.getElementById('bulkInput');
+const bulkSepEl       = document.getElementById('bulkSep');
+const bulkCustomField = document.getElementById('bulkCustomSepField');
+const bulkCustomSepEl = document.getElementById('bulkCustomSep');
+const bulkColorModeEl = document.getElementById('bulkColorMode');
+const bulkCaseEl      = document.getElementById('bulkCaseSensitive');
+const bulkWholeEl     = document.getElementById('bulkWholeWord');
+const bulkRegexEl     = document.getElementById('bulkIsRegex');
+const bulkFileEl      = document.getElementById('bulkFile');
+
+bulkSepEl.addEventListener('change', () => {
+  bulkCustomField.hidden = bulkSepEl.value !== 'custom';
+});
+
+// Whole-word doesn't apply to regex patterns (write your own \b)
+bulkRegexEl.addEventListener('change', () => {
+  bulkWholeEl.disabled = bulkRegexEl.checked;
+  if (bulkRegexEl.checked) bulkWholeEl.checked = false;
+});
+
+function bulkSeparator() {
+  switch (bulkSepEl.value) {
+    case 'comma':     return ',';
+    case 'semicolon': return ';';
+    case 'tab':       return '\t';
+    case 'custom':    return bulkCustomSepEl.value || null;
+    default:          return '\n';
+  }
+}
+
+/**
+ * Split raw input into { text, color } entries.
+ * - "string,#rrggbb" sets a per-entry color (CSV style).
+ * - A token that is ONLY a hex color assigns it to the previous entry
+ *   (covers "string,#color" rows when comma is the separator).
+ */
+function parseBulk(raw, sep) {
+  const tokens = raw.split(sep).map(t => t.trim()).filter(Boolean);
+  const entries = [];
+  for (const tok of tokens) {
+    if (isHexColor(tok) && entries.length) {
+      entries[entries.length - 1].color = tok.toLowerCase();
+      continue;
+    }
+    const m = tok.match(/^(.*?),\s*(#[0-9a-fA-F]{6})$/);
+    if (m && m[1].trim()) {
+      entries.push({ text: m[1].trim(), color: m[2].toLowerCase() });
+    } else {
+      entries.push({ text: tok, color: null });
+    }
+  }
+  return entries;
+}
+
+bulkFileEl.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    bulkInputEl.value = ev.target.result;
+    bulkFileEl.value  = '';
+    showToast(`Loaded ${file.name} — review, then "Add all".`);
+  };
+  reader.readAsText(file);
+});
+
+bulkFormEl.addEventListener('submit', e => {
+  e.preventDefault();
+
+  const sep = bulkSeparator();
+  if (sep === null) {
+    showToast('Enter a custom separator first.');
+    return;
+  }
+
+  const entries = parseBulk(bulkInputEl.value, sep);
+  if (!entries.length) {
+    showToast('Nothing to add.');
+    return;
+  }
+
+  const flags = {
+    caseSensitive: bulkCaseEl.checked,
+    wholeWord:     bulkWholeEl.checked,
+    isRegex:       bulkRegexEl.checked
+  };
+
+  const paletteColors = paletteUI.getActive()?.colors ?? [];
+  const usePalette    = bulkColorModeEl.value === 'palette' && paletteColors.length > 0;
+  const fallbackColor = cpGetHex();
+
+  const seen = new Set(patterns.map(p => p.text));
+  let added = 0, dupes = 0, invalid = 0;
+
+  for (const entry of entries) {
+    if (seen.has(entry.text)) { dupes++; continue; }
+
+    if (flags.isRegex) {
+      try { new RegExp(entry.text); }
+      catch { invalid++; continue; }
+    }
+
+    const color = entry.color
+      ?? (usePalette ? paletteColors[added % paletteColors.length] : fallbackColor);
+
+    patterns.push({ id: nextId(), text: entry.text, color, ...flags });
+    seen.add(entry.text);
+    added++;
+  }
+
+  if (added) {
+    save();
+    renderTable();
+    bulkInputEl.value = '';
+  }
+
+  const parts = [`Added ${added} pattern${added !== 1 ? 's' : ''}`];
+  if (dupes)   parts.push(`${dupes} duplicate${dupes !== 1 ? 's' : ''} skipped`);
+  if (invalid) parts.push(`${invalid} invalid regex skipped`);
+  showToast(parts.join(', ') + '.');
+});
+
+// ─── palette import ───────────────────────────────────────────────────────────
+
+const importPaletteEl = document.getElementById('importPaletteFile');
+
+importPaletteEl.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const parsed   = JSON.parse(ev.target.result);
+      const incoming = (Array.isArray(parsed) ? parsed : [parsed])
+        .map(sanitizePalette)
+        .filter(Boolean);
+
+      if (!incoming.length) {
+        throw new Error('No valid palettes found. Expected {"name": "...", "colors": ["#rrggbb", ...]}.');
+      }
+
+      browser.storage.local.get({ customPalettes: [] }).then(data => {
+        const existing = data.customPalettes;
+        let added = 0, replaced = 0;
+        for (const pal of incoming) {
+          // Same-name import replaces the old custom palette
+          const idx = existing.findIndex(p => p.name === pal.name);
+          if (idx !== -1) { existing[idx] = pal; replaced++; }
+          else            { existing.push(pal);  added++; }
+        }
+        return browser.storage.local.set({ customPalettes: existing })
+          .then(() => paletteUI.refresh())
+          .then(() => {
+            updatePalDeleteBtn();
+            const parts = [];
+            if (added)    parts.push(`${added} palette${added !== 1 ? 's' : ''} added`);
+            if (replaced) parts.push(`${replaced} replaced`);
+            setIoStatus(`Imported: ${parts.join(', ')}.`, 'success');
+          });
+      });
+    } catch (err) {
+      setIoStatus(`Palette import failed: ${err.message}`, 'error');
+    }
+    importPaletteEl.value = '';
   };
   reader.readAsText(file);
 });
