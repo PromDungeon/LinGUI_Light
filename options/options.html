@@ -35,6 +35,7 @@
         <table id="patternTable">
           <thead>
             <tr>
+              <th class="col-on">On</th>
               <th class="col-color">Color</th>
               <th class="col-text">Pattern</th>
               <th class="col-preview">Preview</th>
@@ -50,6 +51,22 @@
           -- No targets on radar --
         </div>
       </div>
+    </section>
+
+    <!-- ── paused sites ───────────────────────────────────────────────── -->
+    <section class="section">
+      <div class="section-header">
+        <h2>Paused sites</h2>
+        <span id="siteCount" class="count-badge">0</span>
+      </div>
+      <p class="bulk-hint">FoxDye stays off on these sites (subdomains included).
+        You can also pause the current site from the popup.</p>
+      <div id="siteList" class="site-list"></div>
+      <div id="siteEmpty" class="empty-state">-- Active everywhere --</div>
+      <form id="siteForm" class="site-form" autocomplete="off">
+        <input type="text" id="siteInput" placeholder="example.com" spellcheck="false">
+        <button type="submit" class="btn btn--ghost">Pause site</button>
+      </form>
     </section>
 
     <!-- ── add / edit form ────────────────────────────────────────────── -->

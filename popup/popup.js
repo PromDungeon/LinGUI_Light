@@ -140,9 +140,13 @@ paletteUI.refresh();
 
 // ─── state ────────────────────────────────────────────────────────────────────
 
-let patterns  = [];
-let enabled   = true;
-let editingId = null;   // id of the pattern loaded into the form, or null when adding
+let patterns      = [];
+let enabled       = true;
+let disabledSites = [];
+let editingId     = null;   // id of the pattern loaded into the form, or null when adding
+let currentHost   = null;   // hostname of the active tab, when reachable
+let currentTabId  = null;
+let matchCounts   = null;   // { patternId: n } from the content script, or null
 
 function nextId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -151,8 +155,64 @@ function nextId() {
 // ─── storage helpers ──────────────────────────────────────────────────────────
 
 function save() {
-  browser.storage.local.set({ patterns, enabled });
+  browser.storage.local.set({ patterns, enabled, disabledSites });
+  scheduleCountRefresh();
 }
+
+// ─── active tab: site toggle & match counts ───────────────────────────────────
+
+const siteBarEl    = document.getElementById('siteBar');
+const siteHostEl   = document.getElementById('siteHost');
+const siteToggleEl = document.getElementById('siteToggle');
+
+function hostIsDisabled(host) {
+  return disabledSites.some(site => host === site || host.endsWith('.' + site));
+}
+
+function fetchStatus() {
+  if (currentTabId === null) return;
+  browser.tabs.sendMessage(currentTabId, { type: 'tr-status' }).then(res => {
+    matchCounts = res?.counts ?? null;
+    renderPatterns();
+  }).catch(() => {
+    // No content script on this page (about:, addons pages, …)
+    matchCounts = null;
+  });
+}
+
+let countTimer = null;
+function scheduleCountRefresh() {
+  // Give the content script a moment to reapply after a storage change
+  clearTimeout(countTimer);
+  countTimer = setTimeout(fetchStatus, 400);
+}
+
+browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
+  const tab = tabs[0];
+  if (!tab?.url || !/^https?:/.test(tab.url)) return;
+
+  currentTabId = tab.id;
+  currentHost  = new URL(tab.url).hostname;
+
+  siteHostEl.textContent = currentHost;
+  siteToggleEl.checked   = !hostIsDisabled(currentHost);
+  siteBarEl.hidden       = false;
+
+  fetchStatus();
+}).catch(() => {});
+
+siteToggleEl.addEventListener('change', () => {
+  if (!currentHost) return;
+  if (siteToggleEl.checked) {
+    // Remove every entry that pauses this host (exact or parent domain)
+    disabledSites = disabledSites.filter(
+      site => !(currentHost === site || currentHost.endsWith('.' + site))
+    );
+  } else {
+    disabledSites.push(currentHost);
+  }
+  save();
+});
 
 // ─── render ───────────────────────────────────────────────────────────────────
 
@@ -166,9 +226,17 @@ function renderPatterns() {
   emptyStateEl.style.display = 'none';
 
   for (const p of patterns) {
+    const isOn = p.enabled !== false;
+
     const row = document.createElement('div');
-    row.className  = 'pattern-row';
+    row.className  = 'pattern-row' + (isOn ? '' : ' row-off');
     row.dataset.id = p.id;
+
+    const led = document.createElement('button');
+    led.className  = 'led' + (isOn ? ' on' : '');
+    led.title      = isOn ? 'Pattern is on — click to pause' : 'Pattern is paused — click to enable';
+    led.dataset.id = p.id;
+    led.addEventListener('click', onToggleEnabled);
 
     const swatch = document.createElement('span');
     swatch.className        = 'swatch';
@@ -178,6 +246,17 @@ function renderPatterns() {
     label.className   = 'pattern-text';
     label.textContent = p.text;
     label.style.color = p.color;
+
+    const count = document.createElement('span');
+    count.className = 'count-chip';
+    if (matchCounts && isOn) {
+      const n = matchCounts[p.id] ?? 0;
+      count.textContent = n;
+      count.title = `${n} match${n === 1 ? '' : 'es'} on this page`;
+      if (n === 0) count.classList.add('zero');
+    } else {
+      count.hidden = true;
+    }
 
     const tags = document.createElement('span');
     tags.className = 'pattern-tags';
@@ -211,9 +290,17 @@ function renderPatterns() {
     del.dataset.id  = p.id;
     del.addEventListener('click', onDelete);
 
-    row.append(swatch, label, tags, edit, del);
+    row.append(led, swatch, label, count, tags, edit, del);
     patternListEl.appendChild(row);
   }
+}
+
+function onToggleEnabled(e) {
+  const p = patterns.find(x => x.id === e.currentTarget.dataset.id);
+  if (!p) return;
+  p.enabled = p.enabled === false;
+  save();
+  renderPatterns();
 }
 
 // ─── event handlers ───────────────────────────────────────────────────────────
@@ -256,12 +343,16 @@ addFormEl.addEventListener('submit', e => {
     color:         hsvToHex(cpH, cpS, cpV),
     caseSensitive: caseSensEl.checked,
     wholeWord:     wholeWordEl.checked,
-    isRegex:       isRegexEl.checked
+    isRegex:       isRegexEl.checked,
+    enabled:       true
   };
 
   if (editingId) {
     const idx = patterns.findIndex(p => p.id === editingId);
-    if (idx !== -1) patterns[idx] = entry;
+    if (idx !== -1) {
+      entry.enabled = patterns[idx].enabled !== false;  // editing keeps pause state
+      patterns[idx] = entry;
+    }
   } else {
     patterns.push(entry);
   }
@@ -332,10 +423,12 @@ themeBtnEl.addEventListener('click', () => {
 
 // ─── init ─────────────────────────────────────────────────────────────────────
 
-browser.storage.local.get({ patterns: [], enabled: true }).then(data => {
-  patterns = data.patterns;
-  enabled  = data.enabled;
+browser.storage.local.get({ patterns: [], enabled: true, disabledSites: [] }).then(data => {
+  patterns      = data.patterns;
+  enabled       = data.enabled;
+  disabledSites = data.disabledSites;
   masterToggleEl.checked = enabled;
+  if (currentHost) siteToggleEl.checked = !hostIsDisabled(currentHost);
   renderPatterns();
   patternInputEl.focus();
 });

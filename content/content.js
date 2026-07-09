@@ -16,10 +16,23 @@ const SKIP_TAGS = new Set([
   'SVG', 'MATH'
 ]);
 
-let patterns    = [];   // [{ id, text, color, caseSensitive, wholeWord, isRegex }]
-let enabled     = true;
-let mutObserver = null;
-let processing  = false;
+let patterns      = [];   // [{ id, text, color, caseSensitive, wholeWord, isRegex, enabled }]
+let enabled       = true;
+let disabledSites = [];   // hostnames FoxDye is paused on (subdomains included)
+let matchCounts   = {};   // pattern id -> matches currently wrapped on this page
+let mutObserver   = null;
+let processing    = false;
+
+/** True when the current page's host is on the paused list. */
+function siteDisabled() {
+  const host = location.hostname;
+  return disabledSites.some(site => host === site || host.endsWith('.' + site));
+}
+
+/** Should we be recoloring on this page right now? */
+function isActive() {
+  return enabled && patterns.length > 0 && !siteDisabled();
+}
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -37,7 +50,7 @@ function escapeHtml(str) {
 /** Build an array of { regex, color } objects, one per active pattern. */
 function buildPatternRegexes(patternList) {
   return patternList
-    .filter(p => p.text && p.text.length > 0)
+    .filter(p => p.text && p.text.length > 0 && p.enabled !== false)
     .map(p => {
       // Regex patterns are compiled as-is; whole-word only applies to
       // literal patterns (regex authors write their own \b).
@@ -102,6 +115,7 @@ function buildReplacedHtml(text, patternRegexes) {
   let html = '';
   let pos   = 0;
   for (const m of kept) {
+    matchCounts[m.id] = (matchCounts[m.id] ?? 0) + 1;
     html += escapeHtml(text.slice(pos, m.start));
     html += `<${WRAP_TAG} ${ATTR}="${m.id}" style="color:${m.color} !important;background:none !important;font-size:inherit !important;font-family:inherit !important;font-weight:inherit !important;">${escapeHtml(m.raw)}</${WRAP_TAG}>`;
     pos   = m.end;
@@ -173,11 +187,12 @@ function unwrapAll() {
   });
   // Merge adjacent text nodes created by the unwrapping
   document.body && document.body.normalize();
+  matchCounts = {};
 }
 
 /** Apply all active patterns to a subtree (defaults to document.body). */
 function applyPatterns(root = document.body) {
-  if (!root || !enabled || !patterns.length) return;
+  if (!root || !isActive()) return;
 
   const patternRegexes = buildPatternRegexes(patterns);
   if (!patternRegexes.length) return;
@@ -191,7 +206,7 @@ function applyPatterns(root = document.body) {
 /** Unwrap then re-apply — called when patterns change. */
 function reapply() {
   unwrapAll();
-  if (enabled && patterns.length) applyPatterns();
+  if (isActive()) applyPatterns();
 }
 
 // ─── mutation observer ────────────────────────────────────────────────────────
@@ -200,7 +215,7 @@ function startObserver() {
   if (mutObserver) return;
 
   mutObserver = new MutationObserver(mutations => {
-    if (processing || !enabled || !patterns.length) return;
+    if (processing || !isActive()) return;
     processing = true;
 
     for (const { addedNodes, target } of mutations) {
@@ -230,11 +245,12 @@ function stopObserver() {
 // ─── storage & messaging ──────────────────────────────────────────────────────
 
 function loadAndApply() {
-  browser.storage.local.get({ patterns: [], enabled: true }).then(data => {
-    patterns = data.patterns;
-    enabled  = data.enabled;
+  browser.storage.local.get({ patterns: [], enabled: true, disabledSites: [] }).then(data => {
+    patterns      = data.patterns;
+    enabled       = data.enabled;
+    disabledSites = data.disabledSites;
 
-    if (enabled && patterns.length) {
+    if (isActive()) {
       applyPatterns();
       startObserver();
     }
@@ -244,12 +260,13 @@ function loadAndApply() {
 browser.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
 
-  if (changes.patterns) patterns = changes.patterns.newValue ?? [];
-  if (changes.enabled)  enabled  = changes.enabled.newValue  ?? true;
+  if (changes.patterns)      patterns      = changes.patterns.newValue      ?? [];
+  if (changes.enabled)       enabled       = changes.enabled.newValue       ?? true;
+  if (changes.disabledSites) disabledSites = changes.disabledSites.newValue ?? [];
 
   stopObserver();
   reapply();
-  if (enabled && patterns.length) startObserver();
+  if (isActive()) startObserver();
 });
 
 // ─── boot ─────────────────────────────────────────────────────────────────────
@@ -575,4 +592,14 @@ function showPicker(text) {
 
 browser.runtime.onMessage.addListener(msg => {
   if (msg.type === 'tr-show-picker') showPicker(msg.text);
+
+  // Popup asks for this page's state: host, activity, and per-pattern counts
+  if (msg.type === 'tr-status') {
+    return Promise.resolve({
+      hostname:     location.hostname,
+      active:       isActive(),
+      siteDisabled: siteDisabled(),
+      counts:       matchCounts
+    });
+  }
 });

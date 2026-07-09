@@ -159,6 +159,51 @@ header {
   box-shadow: 0 1px 2px rgba(0,0,0,0.4), 0 0 6px var(--accent-dim);
 }
 
+/* ── site bar ────────────────────────────────────────────────────────────────── */
+.site-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 14px;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--well-sh);
+}
+.site-bar[hidden] { display: none; }
+
+.site-host {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+
+.site-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+}
+.site-toggle input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+  width: 12px; height: 12px;
+}
+.site-toggle-text {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+.site-toggle:hover .site-toggle-text { color: var(--text); }
+
 /* ── pattern list ────────────────────────────────────────────────────────────── */
 .pattern-list {
   max-height: 210px;
@@ -182,6 +227,45 @@ header {
   transition: background 0.1s;
 }
 .pattern-row:hover { background: var(--plate-hover-bg); }
+
+/* per-pattern power LED */
+.led {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.4);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.led.on {
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  border-color: transparent;
+  box-shadow: 0 0 5px var(--accent-dim);
+}
+
+.pattern-row.row-off .swatch,
+.pattern-row.row-off .pattern-text,
+.pattern-row.row-off .pattern-tags { opacity: 0.35; }
+
+.count-chip {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 1px 6px;
+  box-shadow: var(--well-sh);
+  font-variant-numeric: tabular-nums;
+}
+.count-chip.zero { color: var(--text-mute); }
+.count-chip[hidden] { display: none; }
 
 .swatch {
   flex-shrink: 0;

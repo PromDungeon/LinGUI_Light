@@ -168,8 +168,9 @@ paletteUI.refresh().then(updatePalDeleteBtn);
 
 // ─── state ────────────────────────────────────────────────────────────────────
 
-let patterns = [];
-let enabled  = true;
+let patterns      = [];
+let enabled       = true;
+let disabledSites = [];
 
 function nextId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -178,7 +179,7 @@ function nextId() {
 // ─── storage ──────────────────────────────────────────────────────────────────
 
 function save() {
-  return browser.storage.local.set({ patterns, enabled });
+  return browser.storage.local.set({ patterns, enabled, disabledSites });
 }
 
 // ─── toast ────────────────────────────────────────────────────────────────────
@@ -213,8 +214,23 @@ function renderTable() {
   emptyStateEl.style.display = 'none';
 
   for (const p of patterns) {
+    const isOn = p.enabled !== false;
+
     const tr = document.createElement('tr');
     tr.dataset.id = p.id;
+    if (!isOn) tr.classList.add('row-off');
+
+    // enable LED
+    const tdOn = document.createElement('td');
+    const led  = document.createElement('button');
+    led.className = 'led' + (isOn ? ' on' : '');
+    led.title     = isOn ? 'Pattern is on — click to pause' : 'Pattern is paused — click to enable';
+    led.addEventListener('click', () => {
+      p.enabled = p.enabled === false;
+      save();
+      renderTable();
+    });
+    tdOn.appendChild(led);
 
     // color
     const tdColor = document.createElement('td');
@@ -261,7 +277,7 @@ function renderTable() {
     actWrap.append(editBtn, delBtn);
     tdActions.appendChild(actWrap);
 
-    tr.append(tdColor, tdText, tdPreview, tdFlags, tdActions);
+    tr.append(tdOn, tdColor, tdText, tdPreview, tdFlags, tdActions);
     patternBodyEl.appendChild(tr);
   }
 }
@@ -348,11 +364,12 @@ patternFormEl.addEventListener('submit', e => {
   if (id) {
     const idx = patterns.findIndex(p => p.id === id);
     if (idx !== -1) {
-      patterns[idx] = { id, text, color, ...flags };
+      // editing keeps the pattern's pause state
+      patterns[idx] = { id, text, color, ...flags, enabled: patterns[idx].enabled !== false };
     }
     showToast('Pattern updated.');
   } else {
-    patterns.push({ id: nextId(), text, color, ...flags });
+    patterns.push({ id: nextId(), text, color, ...flags, enabled: true });
     showToast('Pattern added.');
   }
 
@@ -406,7 +423,8 @@ importFileEl.addEventListener('change', e => {
         color:         p.color,
         caseSensitive: !!p.caseSensitive,
         wholeWord:     !!p.wholeWord,
-        isRegex:       !!p.isRegex
+        isRegex:       !!p.isRegex,
+        enabled:       p.enabled !== false
       }));
 
       if (!valid.length) throw new Error('No valid patterns found.');
@@ -427,6 +445,71 @@ importFileEl.addEventListener('change', e => {
   };
   reader.readAsText(file);
 });
+
+// ─── paused sites ─────────────────────────────────────────────────────────────
+
+const siteListEl  = document.getElementById('siteList');
+const siteEmptyEl = document.getElementById('siteEmpty');
+const siteCountEl = document.getElementById('siteCount');
+const siteFormEl  = document.getElementById('siteForm');
+const siteInputEl = document.getElementById('siteInput');
+
+function renderSites() {
+  siteCountEl.textContent = disabledSites.length;
+  siteListEl.innerHTML    = '';
+  siteEmptyEl.style.display = disabledSites.length ? 'none' : 'block';
+
+  for (const site of disabledSites) {
+    const chip = document.createElement('span');
+    chip.className = 'site-chip';
+
+    const name = document.createElement('span');
+    name.textContent = site;
+
+    const remove = document.createElement('button');
+    remove.className   = 'site-chip-remove';
+    remove.title       = `Resume FoxDye on ${site}`;
+    remove.textContent = '×';
+    remove.addEventListener('click', () => {
+      disabledSites = disabledSites.filter(s => s !== site);
+      save();
+      renderSites();
+      showToast(`Resumed on ${site}.`);
+    });
+
+    chip.append(name, remove);
+    siteListEl.appendChild(chip);
+  }
+}
+
+siteFormEl.addEventListener('submit', e => {
+  e.preventDefault();
+
+  let host = siteInputEl.value.trim().toLowerCase();
+  if (!host) return;
+
+  // Accept pasted URLs and strip to the hostname
+  if (host.includes('://')) {
+    try { host = new URL(host).hostname; } catch { /* fall through to validation */ }
+  }
+  host = host.replace(/^www\./, '').replace(/\/.*$/, '');
+
+  if (!/^([a-z0-9-]+\.)+[a-z0-9-]+$/.test(host)) {
+    siteInputEl.setCustomValidity('Enter a hostname like example.com');
+    siteInputEl.reportValidity();
+    return;
+  }
+
+  if (!disabledSites.includes(host)) {
+    disabledSites.push(host);
+    save();
+    renderSites();
+    showToast(`Paused on ${host}.`);
+  }
+  siteInputEl.value = '';
+});
+
+siteInputEl.addEventListener('input', () => siteInputEl.setCustomValidity(''));
 
 // ─── bulk add ─────────────────────────────────────────────────────────────────
 
@@ -536,7 +619,7 @@ bulkFormEl.addEventListener('submit', e => {
     const color = entry.color
       ?? (usePalette ? paletteColors[added % paletteColors.length] : fallbackColor);
 
-    patterns.push({ id: nextId(), text: entry.text, color, ...flags });
+    patterns.push({ id: nextId(), text: entry.text, color, ...flags, enabled: true });
     seen.add(entry.text);
     added++;
   }
@@ -626,10 +709,12 @@ themeBtnEl.addEventListener('click', () => {
 
 // ─── init ─────────────────────────────────────────────────────────────────────
 
-browser.storage.local.get({ patterns: [], enabled: true }).then(data => {
-  patterns = data.patterns;
-  enabled  = data.enabled;
+browser.storage.local.get({ patterns: [], enabled: true, disabledSites: [] }).then(data => {
+  patterns      = data.patterns;
+  enabled       = data.enabled;
+  disabledSites = data.disabledSites;
   masterToggleEl.checked = enabled;
   renderTable();
+  renderSites();
   cpSetHex('#ff4d4d');
 });
