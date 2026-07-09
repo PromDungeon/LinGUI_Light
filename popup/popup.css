@@ -228,23 +228,38 @@ header {
 }
 .pattern-row:hover { background: var(--plate-hover-bg); }
 
-/* per-pattern power LED */
-.led {
+/* per-pattern mini toggle switch */
+.mini-toggle {
   flex-shrink: 0;
-  width: 9px;
-  height: 9px;
+  position: relative;
+  width: 24px;
+  height: 13px;
   border-radius: 99px;
   border: 1px solid var(--border);
   background: var(--bg3);
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.4);
+  box-shadow: var(--well-sh);
   cursor: pointer;
   padding: 0;
-  transition: background 0.15s, box-shadow 0.15s;
+  transition: background 0.15s, border-color 0.15s;
 }
-.led.on {
-  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+.mini-toggle::after {
+  content: '';
+  position: absolute;
+  top: 1px; left: 1px;
+  width: 9px; height: 9px;
+  border-radius: 99px;
+  background: linear-gradient(180deg, #7d7e86, #5f6068);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  transition: transform 0.15s, background 0.15s;
+}
+.mini-toggle:hover { border-color: var(--text-dim); }
+.mini-toggle.on {
+  background: var(--accent-dim);
   border-color: transparent;
-  box-shadow: 0 0 5px var(--accent-dim);
+}
+.mini-toggle.on::after {
+  transform: translateX(11px);
+  background: linear-gradient(180deg, #ffffff, #e8e8ec);
 }
 
 .pattern-row.row-off .swatch,

@@ -233,8 +233,10 @@ function renderPatterns() {
     row.dataset.id = p.id;
 
     const led = document.createElement('button');
-    led.className  = 'led' + (isOn ? ' on' : '');
+    led.className  = 'mini-toggle' + (isOn ? ' on' : '');
     led.title      = isOn ? 'Pattern is on — click to pause' : 'Pattern is paused — click to enable';
+    led.setAttribute('aria-label', led.title);
+    led.setAttribute('aria-pressed', String(isOn));
     led.dataset.id = p.id;
     led.addEventListener('click', onToggleEnabled);
 

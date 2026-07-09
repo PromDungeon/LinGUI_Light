@@ -223,8 +223,10 @@ function renderTable() {
     // enable LED
     const tdOn = document.createElement('td');
     const led  = document.createElement('button');
-    led.className = 'led' + (isOn ? ' on' : '');
+    led.className = 'mini-toggle' + (isOn ? ' on' : '');
     led.title     = isOn ? 'Pattern is on — click to pause' : 'Pattern is paused — click to enable';
+    led.setAttribute('aria-label', led.title);
+    led.setAttribute('aria-pressed', String(isOn));
     led.addEventListener('click', () => {
       p.enabled = p.enabled === false;
       save();
