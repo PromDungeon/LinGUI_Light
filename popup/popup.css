@@ -172,37 +172,59 @@ header {
 }
 .site-bar[hidden] { display: none; }
 
-.site-host {
+/* segmented control: which scope the folder toggles edit */
+.scope-switch {
   flex: 1;
+  display: flex;
+  min-width: 0;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.scope-btn {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--mono);
-  font-size: 11px;
+  background: transparent;
+  border: none;
+  border-radius: 99px;
   color: var(--text-dim);
-  letter-spacing: 0.02em;
-}
-
-.site-toggle {
-  display: flex;
-  align-items: center;
-  gap: 5px;
   cursor: pointer;
-  user-select: none;
-  flex-shrink: 0;
-}
-.site-toggle input[type="checkbox"] {
-  accent-color: var(--accent);
-  cursor: pointer;
-  width: 12px; height: 12px;
-}
-.site-toggle-text {
+  font-family: var(--font);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text-dim);
+  letter-spacing: 0.03em;
+  padding: 4px 10px;
+  transition: color 0.15s, background 0.15s;
 }
-.site-toggle:hover .site-toggle-text { color: var(--text); }
+.scope-btn:hover { color: var(--text); }
+.scope-btn.active {
+  background: var(--plate-bg);
+  color: var(--accent);
+  box-shadow: var(--plate-sh);
+}
+
+.rule-reset {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.rule-reset:hover { color: var(--accent); border-color: var(--accent-dim); }
+.rule-reset[hidden] { display: none; }
 
 /* ── pattern list ────────────────────────────────────────────────────────────── */
 .pattern-list {
@@ -227,6 +249,65 @@ header {
   transition: background 0.1s;
 }
 .pattern-row:hover { background: var(--plate-hover-bg); }
+
+/* ── folder sections ─────────────────────────────────────────────────────────── */
+.folder-section { display: flex; flex-direction: column; gap: 6px; }
+
+.folder-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 4px 0;
+}
+
+.folder-caret {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-mute);
+  font-size: 10px;
+  padding: 2px 3px;
+  font-family: var(--font);
+  transition: color 0.15s;
+}
+.folder-caret:hover { color: var(--accent); }
+
+.folder-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.folder-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 12px;
+}
+
+.folder-off .folder-name { color: var(--text-mute); }
+.folder-off .folder-body { opacity: 0.45; }
+
+/* folder picker row in the add form */
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.folder-row-label {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+.folder-row .pal-select { flex: 1; width: auto; }
 
 /* per-pattern mini toggle switch */
 .mini-toggle {

@@ -12,6 +12,7 @@ const wholeWordEl    = document.getElementById('wholeWord');
 const isRegexEl      = document.getElementById('isRegex');
 const submitBtnEl    = document.getElementById('submitBtn');
 const cancelEditEl   = document.getElementById('cancelEditBtn');
+const folderSelectEl = document.getElementById('folderSelect');
 
 // ─── custom colour picker (replaces <input type="color"> to avoid browser crash) ──
 
@@ -140,13 +141,22 @@ paletteUI.refresh();
 
 // ─── state ────────────────────────────────────────────────────────────────────
 
-let patterns      = [];
-let enabled       = true;
-let disabledSites = [];
-let editingId     = null;   // id of the pattern loaded into the form, or null when adding
-let currentHost   = null;   // hostname of the active tab, when reachable
-let currentTabId  = null;
-let matchCounts   = null;   // { patternId: n } from the content script, or null
+let patterns     = [];
+let folders      = [];
+let siteRules    = [];
+let enabled      = true;
+let editingId    = null;   // id of the pattern loaded into the form, or null when adding
+let currentHost  = null;   // hostname of the active tab, when reachable
+let currentTabId = null;
+let matchCounts  = null;   // { patternId: n } from the content script, or null
+let scope        = 'global';   // 'global' | 'site' — what the folder toggles edit
+
+// remembered collapsed folder sections
+const COLLAPSE_KEY = 'foxdye-collapsed';
+const collapsed = new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '[]'));
+function saveCollapsed() {
+  localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...collapsed]));
+}
 
 function nextId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -155,18 +165,66 @@ function nextId() {
 // ─── storage helpers ──────────────────────────────────────────────────────────
 
 function save() {
-  browser.storage.local.set({ patterns, enabled, disabledSites });
+  browser.storage.local.set({ patterns, enabled, folders, siteRules });
   scheduleCountRefresh();
 }
 
-// ─── active tab: site toggle & match counts ───────────────────────────────────
+// ─── active tab, scope switcher & match counts ────────────────────────────────
 
-const siteBarEl    = document.getElementById('siteBar');
-const siteHostEl   = document.getElementById('siteHost');
-const siteToggleEl = document.getElementById('siteToggle');
+const siteBarEl     = document.getElementById('siteBar');
+const scopeGlobalEl = document.getElementById('scopeGlobal');
+const scopeSiteEl   = document.getElementById('scopeSite');
+const ruleResetEl   = document.getElementById('ruleReset');
 
-function hostIsDisabled(host) {
-  return disabledSites.some(site => host === site || host.endsWith('.' + site));
+/** The rule saved for exactly this host (editing always targets this). */
+function exactRule() {
+  return siteRules.find(r => r.host === currentHost) ?? null;
+}
+
+/** Folder ids considered "on" in the current scope. */
+function effectiveFolderSet() {
+  if (scope === 'site' && currentHost) {
+    return activeFolderIds(currentHost, folders, siteRules);
+  }
+  return new Set(folders.filter(f => f.enabled !== false).map(f => f.id));
+}
+
+function setScope(next) {
+  scope = next;
+  scopeGlobalEl.classList.toggle('active', scope === 'global');
+  scopeSiteEl.classList.toggle('active', scope === 'site');
+  ruleResetEl.hidden = !(scope === 'site' && exactRule());
+  renderPatterns();
+}
+
+scopeGlobalEl.addEventListener('click', () => setScope('global'));
+scopeSiteEl.addEventListener('click', () => setScope('site'));
+
+ruleResetEl.addEventListener('click', () => {
+  siteRules = siteRules.filter(r => r.host !== currentHost);
+  save();
+  setScope('site');
+});
+
+/** Toggle a folder in the current scope. */
+function toggleFolder(folderId) {
+  if (scope === 'site' && currentHost) {
+    let rule = exactRule();
+    if (!rule) {
+      // First site-specific change: seed a rule from what runs here today
+      rule = { host: currentHost, folders: [...activeFolderIds(currentHost, folders, siteRules)] };
+      siteRules.push(rule);
+    }
+    rule.folders = rule.folders.includes(folderId)
+      ? rule.folders.filter(id => id !== folderId)
+      : [...rule.folders, folderId];
+  } else {
+    const f = folders.find(x => x.id === folderId);
+    if (f) f.enabled = f.enabled === false;
+  }
+  ruleResetEl.hidden = !(scope === 'site' && exactRule());
+  save();
+  renderPatterns();
 }
 
 function fetchStatus() {
@@ -194,27 +252,85 @@ browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
   currentTabId = tab.id;
   currentHost  = new URL(tab.url).hostname;
 
-  siteHostEl.textContent = currentHost;
-  siteToggleEl.checked   = !hostIsDisabled(currentHost);
-  siteBarEl.hidden       = false;
+  scopeSiteEl.textContent = currentHost;
+  siteBarEl.hidden        = false;
+  ruleResetEl.hidden      = !(scope === 'site' && exactRule());
 
   fetchStatus();
 }).catch(() => {});
 
-siteToggleEl.addEventListener('change', () => {
-  if (!currentHost) return;
-  if (siteToggleEl.checked) {
-    // Remove every entry that pauses this host (exact or parent domain)
-    disabledSites = disabledSites.filter(
-      site => !(currentHost === site || currentHost.endsWith('.' + site))
-    );
-  } else {
-    disabledSites.push(currentHost);
-  }
-  save();
-});
-
 // ─── render ───────────────────────────────────────────────────────────────────
+
+function buildPatternRow(p) {
+  const isOn = p.enabled !== false;
+
+  const row = document.createElement('div');
+  row.className  = 'pattern-row' + (isOn ? '' : ' row-off');
+  row.dataset.id = p.id;
+
+  const led = document.createElement('button');
+  led.className  = 'mini-toggle' + (isOn ? ' on' : '');
+  led.title      = isOn ? 'Pattern is on — click to pause' : 'Pattern is paused — click to enable';
+  led.setAttribute('aria-label', led.title);
+  led.setAttribute('aria-pressed', String(isOn));
+  led.dataset.id = p.id;
+  led.addEventListener('click', onToggleEnabled);
+
+  const swatch = document.createElement('span');
+  swatch.className        = 'swatch';
+  swatch.style.background = p.color;
+
+  const label = document.createElement('span');
+  label.className   = 'pattern-text';
+  label.textContent = p.text;
+  label.style.color = p.color;
+
+  const count = document.createElement('span');
+  count.className = 'count-chip';
+  if (matchCounts && isOn) {
+    const n = matchCounts[p.id] ?? 0;
+    count.textContent = n;
+    count.title = `${n} match${n === 1 ? '' : 'es'} on this page`;
+    if (n === 0) count.classList.add('zero');
+  } else {
+    count.hidden = true;
+  }
+
+  const tags = document.createElement('span');
+  tags.className = 'pattern-tags';
+  if (p.caseSensitive) {
+    const t = document.createElement('span');
+    t.className = 'tag'; t.textContent = 'Aa'; t.title = 'Case sensitive';
+    tags.appendChild(t);
+  }
+  if (p.wholeWord) {
+    const t = document.createElement('span');
+    t.className = 'tag'; t.textContent = '\\b'; t.title = 'Whole word';
+    tags.appendChild(t);
+  }
+  if (p.isRegex) {
+    const t = document.createElement('span');
+    t.className = 'tag'; t.textContent = '.*'; t.title = 'Regular expression';
+    tags.appendChild(t);
+  }
+
+  const edit = document.createElement('button');
+  edit.className   = 'btn-edit';
+  edit.title       = 'Edit';
+  edit.textContent = '✎';
+  edit.dataset.id  = p.id;
+  edit.addEventListener('click', onEdit);
+
+  const del = document.createElement('button');
+  del.className   = 'btn-delete';
+  del.title       = 'Remove';
+  del.textContent = '×';
+  del.dataset.id  = p.id;
+  del.addEventListener('click', onDelete);
+
+  row.append(led, swatch, label, count, tags, edit, del);
+  return row;
+}
 
 function renderPatterns() {
   patternListEl.innerHTML = '';
@@ -225,75 +341,69 @@ function renderPatterns() {
   }
   emptyStateEl.style.display = 'none';
 
-  for (const p of patterns) {
-    const isOn = p.enabled !== false;
+  const activeSet  = effectiveFolderSet();
+  const siteScoped = scope === 'site' && currentHost;
 
-    const row = document.createElement('div');
-    row.className  = 'pattern-row' + (isOn ? '' : ' row-off');
-    row.dataset.id = p.id;
+  for (const f of folders) {
+    const pats = patterns.filter(p => p.folderId === f.id);
+    if (!pats.length) continue;   // empty folders are managed on the options page
 
-    const led = document.createElement('button');
-    led.className  = 'mini-toggle' + (isOn ? ' on' : '');
-    led.title      = isOn ? 'Pattern is on — click to pause' : 'Pattern is paused — click to enable';
-    led.setAttribute('aria-label', led.title);
-    led.setAttribute('aria-pressed', String(isOn));
-    led.dataset.id = p.id;
-    led.addEventListener('click', onToggleEnabled);
+    const folderOn    = activeSet.has(f.id);
+    const isCollapsed = collapsed.has(f.id);
 
-    const swatch = document.createElement('span');
-    swatch.className        = 'swatch';
-    swatch.style.background = p.color;
+    const section = document.createElement('div');
+    section.className = 'folder-section' + (folderOn ? '' : ' folder-off');
 
-    const label = document.createElement('span');
-    label.className   = 'pattern-text';
-    label.textContent = p.text;
-    label.style.color = p.color;
+    const head = document.createElement('div');
+    head.className = 'folder-head';
+
+    const caret = document.createElement('button');
+    caret.className   = 'folder-caret';
+    caret.textContent = isCollapsed ? '▸' : '▾';
+    caret.title       = isCollapsed ? 'Expand folder' : 'Collapse folder';
+    caret.addEventListener('click', () => {
+      collapsed.has(f.id) ? collapsed.delete(f.id) : collapsed.add(f.id);
+      saveCollapsed();
+      renderPatterns();
+    });
+
+    const name = document.createElement('span');
+    name.className   = 'folder-name';
+    name.textContent = f.name;
 
     const count = document.createElement('span');
     count.className = 'count-chip';
-    if (matchCounts && isOn) {
-      const n = matchCounts[p.id] ?? 0;
-      count.textContent = n;
-      count.title = `${n} match${n === 1 ? '' : 'es'} on this page`;
-      if (n === 0) count.classList.add('zero');
+    if (matchCounts && folderOn) {
+      const total = pats.reduce((sum, p) => sum + (matchCounts[p.id] ?? 0), 0);
+      count.textContent = total;
+      count.title = `${total} match${total === 1 ? '' : 'es'} on this page`;
+      if (total === 0) count.classList.add('zero');
     } else {
       count.hidden = true;
     }
 
-    const tags = document.createElement('span');
-    tags.className = 'pattern-tags';
-    if (p.caseSensitive) {
-      const t = document.createElement('span');
-      t.className = 'tag'; t.textContent = 'Aa'; t.title = 'Case sensitive';
-      tags.appendChild(t);
-    }
-    if (p.wholeWord) {
-      const t = document.createElement('span');
-      t.className = 'tag'; t.textContent = '\\b'; t.title = 'Whole word';
-      tags.appendChild(t);
-    }
-    if (p.isRegex) {
-      const t = document.createElement('span');
-      t.className = 'tag'; t.textContent = '.*'; t.title = 'Regular expression';
-      tags.appendChild(t);
+    const toggle = document.createElement('button');
+    toggle.className = 'mini-toggle' + (folderOn ? ' on' : '');
+    toggle.title = siteScoped
+      ? (folderOn ? `"${f.name}" runs on ${currentHost} — click to exclude`
+                  : `"${f.name}" is off on ${currentHost} — click to include`)
+      : (folderOn ? `"${f.name}" is on by default — click to pause everywhere`
+                  : `"${f.name}" is paused everywhere — click to enable`);
+    toggle.setAttribute('aria-label', toggle.title);
+    toggle.setAttribute('aria-pressed', String(folderOn));
+    toggle.addEventListener('click', () => toggleFolder(f.id));
+
+    head.append(caret, name, count, toggle);
+    section.appendChild(head);
+
+    if (!isCollapsed) {
+      const body = document.createElement('div');
+      body.className = 'folder-body';
+      for (const p of pats) body.appendChild(buildPatternRow(p));
+      section.appendChild(body);
     }
 
-    const edit = document.createElement('button');
-    edit.className   = 'btn-edit';
-    edit.title       = 'Edit';
-    edit.textContent = '✎';
-    edit.dataset.id  = p.id;
-    edit.addEventListener('click', onEdit);
-
-    const del = document.createElement('button');
-    del.className   = 'btn-delete';
-    del.title       = 'Remove';
-    del.textContent = '×';
-    del.dataset.id  = p.id;
-    del.addEventListener('click', onDelete);
-
-    row.append(led, swatch, label, count, tags, edit, del);
-    patternListEl.appendChild(row);
+    patternListEl.appendChild(section);
   }
 }
 
@@ -346,7 +456,8 @@ addFormEl.addEventListener('submit', e => {
     caseSensitive: caseSensEl.checked,
     wholeWord:     wholeWordEl.checked,
     isRegex:       isRegexEl.checked,
-    enabled:       true
+    enabled:       true,
+    folderId:      folderSelectEl.value || GENERAL_FOLDER_ID
   };
 
   if (editingId) {
@@ -368,7 +479,7 @@ function resetForm() {
   editingId            = null;
   patternInputEl.value = '';
   caseSensEl.checked   = false;
-  wholeWordEl.checked  = false;
+  wholeWordEl.checked  = true;   // whole word is the default; opt out per pattern
   isRegexEl.checked    = false;
   wholeWordEl.disabled = false;
   submitBtnEl.textContent = 'Add pattern';
@@ -388,6 +499,7 @@ function onEdit(e) {
   wholeWordEl.checked  = p.wholeWord;
   isRegexEl.checked    = !!p.isRegex;
   wholeWordEl.disabled = !!p.isRegex;
+  folderSelectEl.value = p.folderId ?? GENERAL_FOLDER_ID;
   cpSetHex(p.color);
   submitBtnEl.textContent = 'Save changes';
   cancelEditEl.hidden  = false;
@@ -425,12 +537,29 @@ themeBtnEl.addEventListener('click', () => {
 
 // ─── init ─────────────────────────────────────────────────────────────────────
 
-browser.storage.local.get({ patterns: [], enabled: true, disabledSites: [] }).then(data => {
-  patterns      = data.patterns;
-  enabled       = data.enabled;
-  disabledSites = data.disabledSites;
+function renderFolderSelect() {
+  const prev = folderSelectEl.value;
+  folderSelectEl.innerHTML = '';
+  for (const f of folders) {
+    const opt = document.createElement('option');
+    opt.value = f.id;
+    opt.textContent = f.name;
+    folderSelectEl.appendChild(opt);
+  }
+  if (folders.some(f => f.id === prev)) folderSelectEl.value = prev;
+}
+
+browser.storage.local.get({
+  patterns: [], enabled: true, folders: null, siteRules: null, disabledSites: []
+}).then(data => {
+  ensureSchema(data);   // normalize locally; background persists the migration
+  patterns  = data.patterns;
+  folders   = data.folders;
+  siteRules = data.siteRules;
+  enabled   = data.enabled;
   masterToggleEl.checked = enabled;
-  if (currentHost) siteToggleEl.checked = !hostIsDisabled(currentHost);
+  ruleResetEl.hidden = !(scope === 'site' && exactRule());
+  renderFolderSelect();
   renderPatterns();
   patternInputEl.focus();
 });

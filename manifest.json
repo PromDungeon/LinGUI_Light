@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "FoxDye",
-  "version": "1.6.1.1",
+  "version": "1.7.0",
   "description": "Recolor specific words, characters, or strings on any webpage.",
 
   "permissions": [
@@ -22,6 +22,7 @@
   "browser_action": {
     "default_popup": "popup/popup.html",
     "default_title": "FoxDye",
+    "default_area": "navbar",
     "default_icon": {
       "16":  "icons/icon16.png",
       "32":  "icons/icon32.png",
@@ -35,7 +36,7 @@
   },
 
   "background": {
-    "scripts": ["background.js"],
+    "scripts": ["common/model.js", "background.js"],
     "persistent": false
   },
 
@@ -49,7 +50,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content/content.js"],
+      "js": ["common/model.js", "content/content.js"],
       "run_at": "document_idle"
     }
   ]

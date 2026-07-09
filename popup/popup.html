@@ -19,11 +19,12 @@
   </header>
 
   <div id="siteBar" class="site-bar" hidden>
-    <span class="site-host" id="siteHost" title="Current site"></span>
-    <label class="site-toggle" title="Run FoxDye on this site">
-      <input type="checkbox" id="siteToggle" checked>
-      <span class="site-toggle-text">This site</span>
-    </label>
+    <div class="scope-switch" role="group" aria-label="Folder toggle scope">
+      <button type="button" id="scopeGlobal" class="scope-btn active">Everywhere</button>
+      <button type="button" id="scopeSite" class="scope-btn" title="Edit which folders run on this site"></button>
+    </div>
+    <button type="button" id="ruleReset" class="rule-reset" hidden
+            title="Remove this site's custom folder set and use the defaults">Reset</button>
   </div>
 
   <div id="patternList" class="pattern-list">
@@ -63,12 +64,17 @@
       <div class="pal-swatches" id="palSwatches"></div>
     </div>
 
+    <div class="folder-row">
+      <label class="folder-row-label" for="folderSelect">Folder</label>
+      <select id="folderSelect" class="pal-select"></select>
+    </div>
+
     <div class="options-row">
       <label class="opt-label">
         <input type="checkbox" id="caseSensitive"> Case sensitive
       </label>
       <label class="opt-label">
-        <input type="checkbox" id="wholeWord"> Whole word
+        <input type="checkbox" id="wholeWord" checked> Whole word
       </label>
       <label class="opt-label" title="Treat the pattern as a regular expression, e.g. \b\d{6}\b">
         <input type="checkbox" id="isRegex"> Regex
@@ -80,6 +86,7 @@
     </div>
   </form>
 
+  <script src="../common/model.js"></script>
   <script src="../common/palettes.js"></script>
   <script src="popup.js"></script>
 </body>

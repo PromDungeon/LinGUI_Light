@@ -25,7 +25,7 @@
     </header>
 
     <!-- ── pattern table ──────────────────────────────────────────────── -->
-    <section class="section">
+    <section class="section" id="sec-patterns">
       <div class="section-header">
         <h2>Patterns</h2>
         <span id="patternCount" class="count-badge">0</span>
@@ -39,6 +39,7 @@
               <th class="col-color">Color</th>
               <th class="col-text">Pattern</th>
               <th class="col-preview">Preview</th>
+              <th class="col-folder">Folder</th>
               <th class="col-flags">Flags</th>
               <th class="col-actions"></th>
             </tr>
@@ -53,24 +54,8 @@
       </div>
     </section>
 
-    <!-- ── paused sites ───────────────────────────────────────────────── -->
-    <section class="section">
-      <div class="section-header">
-        <h2>Paused sites</h2>
-        <span id="siteCount" class="count-badge">0</span>
-      </div>
-      <p class="bulk-hint">FoxDye stays off on these sites (subdomains included).
-        You can also pause the current site from the popup.</p>
-      <div id="siteList" class="site-list"></div>
-      <div id="siteEmpty" class="empty-state">-- Active everywhere --</div>
-      <form id="siteForm" class="site-form" autocomplete="off">
-        <input type="text" id="siteInput" placeholder="example.com" spellcheck="false">
-        <button type="submit" class="btn btn--ghost">Pause site</button>
-      </form>
-    </section>
-
     <!-- ── add / edit form ────────────────────────────────────────────── -->
-    <section class="section">
+    <section class="section" id="sec-form">
       <h2 id="formTitle">Add pattern</h2>
       <form id="patternForm" autocomplete="off">
         <input type="hidden" id="editId">
@@ -86,6 +71,8 @@
               spellcheck="false"
               required
             >
+            <label for="patternFolder" style="margin-top:8px">Folder</label>
+            <select id="patternFolder" class="folder-select"></select>
           </div>
 
           <!-- Custom colour picker — no <input type="color"> to avoid browser crash -->
@@ -117,7 +104,7 @@
             <span>Case sensitive</span>
           </label>
           <label class="flag-label">
-            <input type="checkbox" id="wholeWord">
+            <input type="checkbox" id="wholeWord" checked>
             <span>Whole word only</span>
           </label>
           <label class="flag-label" title="Treat the pattern as a regular expression, e.g. \b\d{6}\b">
@@ -138,8 +125,48 @@
       </form>
     </section>
 
+
+    <!-- ── folders ────────────────────────────────────────────────────── -->
+    <section class="section" id="sec-folders">
+      <div class="section-header">
+        <h2>Folders</h2>
+        <span id="folderCount" class="count-badge">0</span>
+      </div>
+      <p class="bulk-hint">Group patterns into folders and toggle them as a set.
+        The switch is each folder's default everywhere; site rules below can override it per site.</p>
+      <div id="folderList" class="folder-list"></div>
+      <form id="folderForm" class="site-form" autocomplete="off">
+        <input type="text" id="folderInput" placeholder="New folder name…" spellcheck="false" maxlength="30">
+        <button type="submit" class="btn btn--ghost">Add folder</button>
+      </form>
+    </section>
+
+    <!-- ── site rules ─────────────────────────────────────────────────── -->
+    <section class="section" id="sec-rules">
+      <div class="section-header">
+        <h2>Site rules</h2>
+        <span id="ruleCount" class="count-badge">0</span>
+      </div>
+      <p class="bulk-hint">A rule decides exactly which folders run on a site
+        (subdomains included). Checking none turns FoxDye off there. Sites without
+        a rule use the folder defaults above.</p>
+      <div id="ruleList" class="rule-list"></div>
+      <div id="ruleEmpty" class="empty-state">-- No site rules: folder defaults apply everywhere --</div>
+      <form id="ruleForm" class="rule-form" autocomplete="off">
+        <input type="hidden" id="ruleEditHost">
+        <div class="rule-form-row">
+          <input type="text" id="ruleHostInput" placeholder="example.com" spellcheck="false">
+          <div id="ruleFolderChecks" class="rule-folder-checks"></div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" id="ruleSubmitBtn" class="btn btn--primary">Add rule</button>
+          <button type="button" id="ruleCancelBtn" class="btn btn--ghost" style="display:none">Cancel</button>
+        </div>
+      </form>
+    </section>
+
     <!-- ── bulk add ───────────────────────────────────────────────────── -->
-    <section class="section">
+    <section class="section" id="sec-bulk">
       <h2>Bulk add</h2>
       <p class="bulk-hint">
         Paste multiple entries at once, or load them from a CSV / text file.
@@ -176,6 +203,10 @@
               <option value="palette">Cycle active palette</option>
             </select>
           </div>
+          <div class="field">
+            <label for="bulkFolder">Folder</label>
+            <select id="bulkFolder"></select>
+          </div>
         </div>
 
         <div class="flags-row">
@@ -184,7 +215,7 @@
             <span>Case sensitive</span>
           </label>
           <label class="flag-label">
-            <input type="checkbox" id="bulkWholeWord">
+            <input type="checkbox" id="bulkWholeWord" checked>
             <span>Whole word only</span>
           </label>
           <label class="flag-label" title="Treat each entry as a regular expression">
@@ -204,7 +235,7 @@
     </section>
 
     <!-- ── import / export ────────────────────────────────────────────── -->
-    <section class="section section--io">
+    <section class="section section--io" id="sec-io">
       <h2>Import / Export</h2>
       <div class="io-row">
         <button id="exportBtn" class="btn btn--ghost">Export JSON</button>
@@ -223,6 +254,7 @@
     <div id="toast" class="toast" aria-live="polite"></div>
 
   </div><!-- .page -->
+  <script src="../common/model.js"></script>
   <script src="../common/palettes.js"></script>
   <script src="options.js"></script>
 </body>

@@ -2,6 +2,24 @@
  * Text Recolor — background script
  */
 
+// ─── schema migration (v2: folders + site rules) ─────────────────────────────
+
+function migrateStorage() {
+  browser.storage.local.get({
+    patterns: [], folders: null, siteRules: null, disabledSites: []
+  }).then(data => {
+    if (!ensureSchema(data)) return;
+    browser.storage.local.set({
+      patterns:  data.patterns,
+      folders:   data.folders,
+      siteRules: data.siteRules
+    }).then(() => browser.storage.local.remove('disabledSites'));
+  });
+}
+
+browser.runtime.onInstalled.addListener(migrateStorage);
+browser.runtime.onStartup.addListener(migrateStorage);
+
 // ─── context menu ─────────────────────────────────────────────────────────────
 
 function createContextMenu() {

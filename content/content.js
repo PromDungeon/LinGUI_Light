@@ -16,22 +16,25 @@ const SKIP_TAGS = new Set([
   'SVG', 'MATH'
 ]);
 
-let patterns      = [];   // [{ id, text, color, caseSensitive, wholeWord, isRegex, enabled }]
-let enabled       = true;
-let disabledSites = [];   // hostnames FoxDye is paused on (subdomains included)
-let matchCounts   = {};   // pattern id -> matches currently wrapped on this page
-let mutObserver   = null;
-let processing    = false;
+// model helpers (activeFolderIds, ensureSchema, …) come from common/model.js,
+// which the manifest loads before this file.
 
-/** True when the current page's host is on the paused list. */
-function siteDisabled() {
-  const host = location.hostname;
-  return disabledSites.some(site => host === site || host.endsWith('.' + site));
+let patterns    = [];   // [{ id, text, color, caseSensitive, wholeWord, isRegex, enabled, folderId }]
+let folders     = [];   // [{ id, name, enabled }]
+let siteRules   = [];   // [{ host, folders: [folderId, ...] }]
+let enabled     = true;
+let mutObserver = null;
+let processing  = false;
+
+/** Patterns that should run on this page: enabled, and in an active folder. */
+function activePatterns() {
+  const activeSet = activeFolderIds(location.hostname, folders, siteRules);
+  return patterns.filter(p => p.enabled !== false && activeSet.has(p.folderId));
 }
 
 /** Should we be recoloring on this page right now? */
 function isActive() {
-  return enabled && patterns.length > 0 && !siteDisabled();
+  return enabled && activePatterns().length > 0;
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -115,7 +118,6 @@ function buildReplacedHtml(text, patternRegexes) {
   let html = '';
   let pos   = 0;
   for (const m of kept) {
-    matchCounts[m.id] = (matchCounts[m.id] ?? 0) + 1;
     html += escapeHtml(text.slice(pos, m.start));
     html += `<${WRAP_TAG} ${ATTR}="${m.id}" style="color:${m.color} !important;background:none !important;font-size:inherit !important;font-family:inherit !important;font-weight:inherit !important;">${escapeHtml(m.raw)}</${WRAP_TAG}>`;
     pos   = m.end;
@@ -187,14 +189,37 @@ function unwrapAll() {
   });
   // Merge adjacent text nodes created by the unwrapping
   document.body && document.body.normalize();
-  matchCounts = {};
+}
+
+/**
+ * Count the matches a user can actually see: injected spans that have a
+ * rendered box. Wrapped matches inside display:none menus, templates, etc.
+ * are excluded — Cmd+F wouldn't find those either.
+ */
+function spanIsVisible(span) {
+  // checkVisibility covers display:none AND visibility:hidden (Firefox 106+);
+  // getClientRects is the fallback and still catches display:none.
+  if (typeof span.checkVisibility === 'function') {
+    return span.checkVisibility({ checkVisibilityCSS: true });
+  }
+  return span.getClientRects().length > 0;
+}
+
+function computeVisibleCounts() {
+  const counts = {};
+  for (const span of document.querySelectorAll(`[${ATTR}]`)) {
+    if (!spanIsVisible(span)) continue;
+    const id = span.getAttribute(ATTR);
+    counts[id] = (counts[id] ?? 0) + 1;
+  }
+  return counts;
 }
 
 /** Apply all active patterns to a subtree (defaults to document.body). */
 function applyPatterns(root = document.body) {
   if (!root || !isActive()) return;
 
-  const patternRegexes = buildPatternRegexes(patterns);
+  const patternRegexes = buildPatternRegexes(activePatterns());
   if (!patternRegexes.length) return;
 
   const nodes = collectTextNodes(root);
@@ -245,10 +270,14 @@ function stopObserver() {
 // ─── storage & messaging ──────────────────────────────────────────────────────
 
 function loadAndApply() {
-  browser.storage.local.get({ patterns: [], enabled: true, disabledSites: [] }).then(data => {
-    patterns      = data.patterns;
-    enabled       = data.enabled;
-    disabledSites = data.disabledSites;
+  browser.storage.local.get({
+    patterns: [], enabled: true, folders: null, siteRules: null, disabledSites: []
+  }).then(data => {
+    ensureSchema(data);   // normalize locally; background persists the migration
+    patterns  = data.patterns;
+    folders   = data.folders;
+    siteRules = data.siteRules;
+    enabled   = data.enabled;
 
     if (isActive()) {
       applyPatterns();
@@ -260,9 +289,10 @@ function loadAndApply() {
 browser.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
 
-  if (changes.patterns)      patterns      = changes.patterns.newValue      ?? [];
-  if (changes.enabled)       enabled       = changes.enabled.newValue       ?? true;
-  if (changes.disabledSites) disabledSites = changes.disabledSites.newValue ?? [];
+  if (changes.patterns)  patterns  = changes.patterns.newValue  ?? [];
+  if (changes.enabled)   enabled   = changes.enabled.newValue   ?? true;
+  if (changes.folders)   folders   = changes.folders.newValue   ?? [];
+  if (changes.siteRules) siteRules = changes.siteRules.newValue ?? [];
 
   stopObserver();
   reapply();
@@ -487,7 +517,7 @@ function showPicker(text) {
         </div>
         <div class="opts">
           <label class="opt-label"><input type="checkbox" id="caseSens"> Case sensitive</label>
-          <label class="opt-label"><input type="checkbox" id="wholeWord"> Whole word</label>
+          <label class="opt-label"><input type="checkbox" id="wholeWord" checked> Whole word</label>
         </div>
         <div class="btns">
           <button class="btn btn-cancel" id="cancelBtn">Cancel</button>
@@ -596,10 +626,9 @@ browser.runtime.onMessage.addListener(msg => {
   // Popup asks for this page's state: host, activity, and per-pattern counts
   if (msg.type === 'tr-status') {
     return Promise.resolve({
-      hostname:     location.hostname,
-      active:       isActive(),
-      siteDisabled: siteDisabled(),
-      counts:       matchCounts
+      hostname: location.hostname,
+      active:   isActive(),
+      counts:   computeVisibleCounts()
     });
   }
 });

@@ -168,9 +168,14 @@ paletteUI.refresh().then(updatePalDeleteBtn);
 
 // ─── state ────────────────────────────────────────────────────────────────────
 
-let patterns      = [];
-let enabled       = true;
-let disabledSites = [];
+let patterns  = [];
+let folders   = [];
+let siteRules = [];
+let enabled   = true;
+
+function folderName(id) {
+  return folders.find(f => f.id === id)?.name ?? '?';
+}
 
 function nextId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -179,7 +184,7 @@ function nextId() {
 // ─── storage ──────────────────────────────────────────────────────────────────
 
 function save() {
-  return browser.storage.local.set({ patterns, enabled, disabledSites });
+  return browser.storage.local.set({ patterns, enabled, folders, siteRules });
 }
 
 // ─── toast ────────────────────────────────────────────────────────────────────
@@ -254,6 +259,11 @@ function renderTable() {
     tdPreview.style.color      = p.color;
     tdPreview.style.fontWeight = '600';
 
+    // folder
+    const tdFolder = document.createElement('td');
+    tdFolder.className   = 'folder-cell';
+    tdFolder.textContent = folderName(p.folderId);
+
     // flags
     const tdFlags = document.createElement('td');
     const chips   = [];
@@ -279,7 +289,7 @@ function renderTable() {
     actWrap.append(editBtn, delBtn);
     tdActions.appendChild(actWrap);
 
-    tr.append(tdOn, tdColor, tdText, tdPreview, tdFlags, tdActions);
+    tr.append(tdOn, tdColor, tdText, tdPreview, tdFolder, tdFlags, tdActions);
     patternBodyEl.appendChild(tr);
   }
 }
@@ -290,7 +300,7 @@ function resetForm() {
   editIdEl.value        = '';
   patternInputEl.value  = '';
   caseSensEl.checked    = false;
-  wholeWordEl.checked   = false;
+  wholeWordEl.checked   = true;   // whole word is the default; opt out per pattern
   isRegexEl.checked     = false;
   wholeWordEl.disabled  = false;
   formTitleEl.textContent   = 'Add pattern';
@@ -309,11 +319,13 @@ function startEdit(id) {
   wholeWordEl.checked  = p.wholeWord;
   isRegexEl.checked    = !!p.isRegex;
   wholeWordEl.disabled = !!p.isRegex;
+  patternFolderEl.value = p.folderId ?? GENERAL_FOLDER_ID;
   formTitleEl.textContent   = 'Edit pattern';
   submitBtnEl.textContent   = 'Save changes';
   cancelBtnEl.style.display = '';
   cpSetHex(p.color);
 
+  expandSection('sec-form');
   patternFormEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   patternInputEl.focus();
 }
@@ -322,6 +334,7 @@ function deletePattern(id) {
   patterns = patterns.filter(p => p.id !== id);
   save();
   renderTable();
+  renderFolders();
   showToast('Pattern removed.');
 }
 
@@ -363,20 +376,23 @@ patternFormEl.addEventListener('submit', e => {
 
   const id = editIdEl.value;
 
+  const folderId = patternFolderEl.value || GENERAL_FOLDER_ID;
+
   if (id) {
     const idx = patterns.findIndex(p => p.id === id);
     if (idx !== -1) {
       // editing keeps the pattern's pause state
-      patterns[idx] = { id, text, color, ...flags, enabled: patterns[idx].enabled !== false };
+      patterns[idx] = { id, text, color, ...flags, enabled: patterns[idx].enabled !== false, folderId };
     }
     showToast('Pattern updated.');
   } else {
-    patterns.push({ id: nextId(), text, color, ...flags, enabled: true });
+    patterns.push({ id: nextId(), text, color, ...flags, enabled: true, folderId });
     showToast('Pattern added.');
   }
 
   save();
   renderTable();
+  renderFolders();
   resetForm();
 });
 
@@ -393,7 +409,7 @@ masterToggleEl.addEventListener('change', () => {
 // ─── export ───────────────────────────────────────────────────────────────────
 
 exportBtnEl.addEventListener('click', () => {
-  const data   = JSON.stringify({ version: 1, patterns }, null, 2);
+  const data   = JSON.stringify({ version: 2, folders, patterns, siteRules }, null, 2);
   const blob   = new Blob([data], { type: 'application/json' });
   const url    = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -416,6 +432,28 @@ importFileEl.addEventListener('change', e => {
       const parsed   = JSON.parse(ev.target.result);
       const incoming = Array.isArray(parsed) ? parsed : (parsed.patterns ?? []);
 
+      // v2 exports carry folders and site rules — merge them first
+      let foldersAdded = 0, rulesAdded = 0;
+      if (Array.isArray(parsed.folders)) {
+        for (const f of parsed.folders) {
+          if (typeof f.id !== 'string' || typeof f.name !== 'string') continue;
+          if (!folders.some(x => x.id === f.id)) {
+            folders.push({ id: f.id, name: f.name, enabled: f.enabled !== false });
+            foldersAdded++;
+          }
+        }
+      }
+      if (Array.isArray(parsed.siteRules)) {
+        for (const r of parsed.siteRules) {
+          if (typeof r.host !== 'string' || !Array.isArray(r.folders)) continue;
+          if (!siteRules.some(x => x.host === r.host)) {
+            siteRules.push({ host: r.host, folders: r.folders.filter(id => typeof id === 'string') });
+            rulesAdded++;
+          }
+        }
+      }
+
+      const knownFolders = new Set(folders.map(f => f.id));
       const valid = incoming.filter(p =>
         typeof p.text === 'string' && p.text.length > 0 &&
         typeof p.color === 'string'
@@ -426,10 +464,11 @@ importFileEl.addEventListener('change', e => {
         caseSensitive: !!p.caseSensitive,
         wholeWord:     !!p.wholeWord,
         isRegex:       !!p.isRegex,
-        enabled:       p.enabled !== false
+        enabled:       p.enabled !== false,
+        folderId:      knownFolders.has(p.folderId) ? p.folderId : GENERAL_FOLDER_ID
       }));
 
-      if (!valid.length) throw new Error('No valid patterns found.');
+      if (!valid.length && !foldersAdded && !rulesAdded) throw new Error('No valid patterns found.');
 
       let added = 0;
       for (const p of valid) {
@@ -438,8 +477,11 @@ importFileEl.addEventListener('change', e => {
       }
 
       save();
-      renderTable();
-      setIoStatus(`Imported ${added} pattern${added !== 1 ? 's' : ''}.`, 'success');
+      renderAll();
+      const parts = [`${added} pattern${added !== 1 ? 's' : ''}`];
+      if (foldersAdded) parts.push(`${foldersAdded} folder${foldersAdded !== 1 ? 's' : ''}`);
+      if (rulesAdded)   parts.push(`${rulesAdded} site rule${rulesAdded !== 1 ? 's' : ''}`);
+      setIoStatus(`Imported ${parts.join(', ')}.`, 'success');
     } catch (err) {
       setIoStatus(`Import failed: ${err.message}`, 'error');
     }
@@ -448,70 +490,244 @@ importFileEl.addEventListener('change', e => {
   reader.readAsText(file);
 });
 
-// ─── paused sites ─────────────────────────────────────────────────────────────
+// ─── folders manager ──────────────────────────────────────────────────────────
 
-const siteListEl  = document.getElementById('siteList');
-const siteEmptyEl = document.getElementById('siteEmpty');
-const siteCountEl = document.getElementById('siteCount');
-const siteFormEl  = document.getElementById('siteForm');
-const siteInputEl = document.getElementById('siteInput');
+const folderListEl  = document.getElementById('folderList');
+const folderCountEl = document.getElementById('folderCount');
+const folderFormEl  = document.getElementById('folderForm');
+const folderInputEl = document.getElementById('folderInput');
+const patternFolderEl = document.getElementById('patternFolder');
+const bulkFolderEl    = document.getElementById('bulkFolder');
 
-function renderSites() {
-  siteCountEl.textContent = disabledSites.length;
-  siteListEl.innerHTML    = '';
-  siteEmptyEl.style.display = disabledSites.length ? 'none' : 'block';
-
-  for (const site of disabledSites) {
-    const chip = document.createElement('span');
-    chip.className = 'site-chip';
-
-    const name = document.createElement('span');
-    name.textContent = site;
-
-    const remove = document.createElement('button');
-    remove.className   = 'site-chip-remove';
-    remove.title       = `Resume FoxDye on ${site}`;
-    remove.textContent = '×';
-    remove.addEventListener('click', () => {
-      disabledSites = disabledSites.filter(s => s !== site);
-      save();
-      renderSites();
-      showToast(`Resumed on ${site}.`);
-    });
-
-    chip.append(name, remove);
-    siteListEl.appendChild(chip);
+function renderFolderSelects() {
+  for (const sel of [patternFolderEl, bulkFolderEl]) {
+    const prev = sel.value;
+    sel.innerHTML = '';
+    for (const f of folders) {
+      const opt = document.createElement('option');
+      opt.value = f.id;
+      opt.textContent = f.name;
+      sel.appendChild(opt);
+    }
+    if (folders.some(f => f.id === prev)) sel.value = prev;
   }
 }
 
-siteFormEl.addEventListener('submit', e => {
+function renderFolders() {
+  folderCountEl.textContent = folders.length;
+  folderListEl.innerHTML    = '';
+
+  for (const f of folders) {
+    const isOn = f.enabled !== false;
+    const row  = document.createElement('div');
+    row.className = 'folder-row-item';
+
+    const toggle = document.createElement('button');
+    toggle.className = 'mini-toggle' + (isOn ? ' on' : '');
+    toggle.title = isOn ? `"${f.name}" is on by default — click to pause everywhere`
+                        : `"${f.name}" is paused everywhere — click to enable`;
+    toggle.setAttribute('aria-label', toggle.title);
+    toggle.setAttribute('aria-pressed', String(isOn));
+    toggle.addEventListener('click', () => {
+      f.enabled = f.enabled === false;
+      save();
+      renderFolders();
+    });
+
+    const name = document.createElement('input');
+    name.type       = 'text';
+    name.className  = 'folder-name-input';
+    name.value      = f.name;
+    name.maxLength  = 30;
+    name.spellcheck = false;
+    name.addEventListener('change', () => {
+      const v = name.value.trim();
+      if (!v) { name.value = f.name; return; }
+      f.name = v;
+      save();
+      renderTable();
+      renderFolderSelects();
+      renderRules();
+    });
+
+    const count = document.createElement('span');
+    count.className   = 'folder-pattern-count';
+    const n = patterns.filter(p => p.folderId === f.id).length;
+    count.textContent = `${n} pattern${n === 1 ? '' : 's'}`;
+
+    const del = document.createElement('button');
+    del.className   = 'btn-icon danger';
+    del.textContent = 'Delete';
+    if (f.id === GENERAL_FOLDER_ID) {
+      del.disabled = true;
+      del.title    = 'The General folder cannot be deleted';
+    } else {
+      del.title = 'Delete folder (its patterns move to General)';
+      del.addEventListener('click', () => {
+        for (const p of patterns) if (p.folderId === f.id) p.folderId = GENERAL_FOLDER_ID;
+        for (const r of siteRules) r.folders = r.folders.filter(id => id !== f.id);
+        folders = folders.filter(x => x.id !== f.id);
+        save();
+        renderAll();
+        showToast(`Folder "${f.name}" deleted — patterns moved to General.`);
+      });
+    }
+
+    row.append(toggle, name, count, del);
+    folderListEl.appendChild(row);
+  }
+}
+
+folderFormEl.addEventListener('submit', e => {
+  e.preventDefault();
+  const name = folderInputEl.value.trim();
+  if (!name) return;
+  if (folders.some(f => f.name.toLowerCase() === name.toLowerCase())) {
+    folderInputEl.setCustomValidity('A folder with that name already exists');
+    folderInputEl.reportValidity();
+    return;
+  }
+  folders.push({ id: nextId(), name, enabled: true });
+  save();
+  renderAll();
+  folderInputEl.value = '';
+  showToast(`Folder "${name}" added.`);
+});
+
+folderInputEl.addEventListener('input', () => folderInputEl.setCustomValidity(''));
+
+// ─── site rules ───────────────────────────────────────────────────────────────
+
+const ruleListEl      = document.getElementById('ruleList');
+const ruleEmptyEl     = document.getElementById('ruleEmpty');
+const ruleCountEl     = document.getElementById('ruleCount');
+const ruleFormEl      = document.getElementById('ruleForm');
+const ruleEditHostEl  = document.getElementById('ruleEditHost');
+const ruleHostInputEl = document.getElementById('ruleHostInput');
+const ruleChecksEl    = document.getElementById('ruleFolderChecks');
+const ruleSubmitEl    = document.getElementById('ruleSubmitBtn');
+const ruleCancelEl    = document.getElementById('ruleCancelBtn');
+
+function renderRuleChecks(checkedIds = null) {
+  ruleChecksEl.innerHTML = '';
+  for (const f of folders) {
+    const label = document.createElement('label');
+    label.className = 'flag-label';
+    const box = document.createElement('input');
+    box.type    = 'checkbox';
+    box.value   = f.id;
+    box.checked = checkedIds ? checkedIds.includes(f.id) : f.enabled !== false;
+    const span = document.createElement('span');
+    span.textContent = f.name;
+    label.append(box, span);
+    ruleChecksEl.appendChild(label);
+  }
+}
+
+function resetRuleForm() {
+  ruleEditHostEl.value  = '';
+  ruleHostInputEl.value = '';
+  ruleHostInputEl.disabled = false;
+  ruleSubmitEl.textContent = 'Add rule';
+  ruleCancelEl.style.display = 'none';
+  renderRuleChecks();
+}
+
+function startRuleEdit(rule) {
+  ruleEditHostEl.value  = rule.host;
+  ruleHostInputEl.value = rule.host;
+  ruleHostInputEl.disabled = true;
+  ruleSubmitEl.textContent = 'Save rule';
+  ruleCancelEl.style.display = '';
+  renderRuleChecks(rule.folders);
+  ruleFormEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+ruleCancelEl.addEventListener('click', resetRuleForm);
+
+function renderRules() {
+  ruleCountEl.textContent = siteRules.length;
+  ruleListEl.innerHTML    = '';
+  ruleEmptyEl.style.display = siteRules.length ? 'none' : 'block';
+
+  for (const rule of siteRules) {
+    const row = document.createElement('div');
+    row.className = 'rule-row';
+
+    const host = document.createElement('span');
+    host.className   = 'rule-host';
+    host.textContent = rule.host;
+
+    const chips = document.createElement('span');
+    chips.className = 'flag-chips';
+    if (!rule.folders.length) {
+      const c = document.createElement('span');
+      c.className = 'chip chip-off';
+      c.textContent = 'Off';
+      chips.appendChild(c);
+    } else {
+      for (const id of rule.folders) {
+        const c = document.createElement('span');
+        c.className = 'chip';
+        c.textContent = folderName(id);
+        chips.appendChild(c);
+      }
+    }
+
+    const editBtn = document.createElement('button');
+    editBtn.className   = 'btn-icon';
+    editBtn.textContent = 'Edit';
+    editBtn.addEventListener('click', () => startRuleEdit(rule));
+
+    const delBtn = document.createElement('button');
+    delBtn.className   = 'btn-icon danger';
+    delBtn.textContent = 'Remove';
+    delBtn.addEventListener('click', () => {
+      siteRules = siteRules.filter(r => r.host !== rule.host);
+      save();
+      renderRules();
+      if (ruleEditHostEl.value === rule.host) resetRuleForm();
+      showToast(`Rule for ${rule.host} removed.`);
+    });
+
+    const actions = document.createElement('span');
+    actions.className = 'row-actions';
+    actions.append(editBtn, delBtn);
+
+    row.append(host, chips, actions);
+    ruleListEl.appendChild(row);
+  }
+}
+
+ruleFormEl.addEventListener('submit', e => {
   e.preventDefault();
 
-  let host = siteInputEl.value.trim().toLowerCase();
+  let host = (ruleEditHostEl.value || ruleHostInputEl.value).trim().toLowerCase();
   if (!host) return;
 
-  // Accept pasted URLs and strip to the hostname
   if (host.includes('://')) {
     try { host = new URL(host).hostname; } catch { /* fall through to validation */ }
   }
   host = host.replace(/^www\./, '').replace(/\/.*$/, '');
 
   if (!/^([a-z0-9-]+\.)+[a-z0-9-]+$/.test(host)) {
-    siteInputEl.setCustomValidity('Enter a hostname like example.com');
-    siteInputEl.reportValidity();
+    ruleHostInputEl.setCustomValidity('Enter a hostname like example.com');
+    ruleHostInputEl.reportValidity();
     return;
   }
 
-  if (!disabledSites.includes(host)) {
-    disabledSites.push(host);
-    save();
-    renderSites();
-    showToast(`Paused on ${host}.`);
-  }
-  siteInputEl.value = '';
+  const checked = [...ruleChecksEl.querySelectorAll('input:checked')].map(b => b.value);
+  const existing = siteRules.find(r => r.host === host);
+  if (existing) existing.folders = checked;
+  else          siteRules.push({ host, folders: checked });
+
+  save();
+  renderRules();
+  resetRuleForm();
+  showToast(`Rule for ${host} saved.`);
 });
 
-siteInputEl.addEventListener('input', () => siteInputEl.setCustomValidity(''));
+ruleHostInputEl.addEventListener('input', () => ruleHostInputEl.setCustomValidity(''));
 
 // ─── bulk add ─────────────────────────────────────────────────────────────────
 
@@ -621,7 +837,10 @@ bulkFormEl.addEventListener('submit', e => {
     const color = entry.color
       ?? (usePalette ? paletteColors[added % paletteColors.length] : fallbackColor);
 
-    patterns.push({ id: nextId(), text: entry.text, color, ...flags, enabled: true });
+    patterns.push({
+      id: nextId(), text: entry.text, color, ...flags,
+      enabled: true, folderId: bulkFolderEl.value || GENERAL_FOLDER_ID
+    });
     seen.add(entry.text);
     added++;
   }
@@ -629,6 +848,7 @@ bulkFormEl.addEventListener('submit', e => {
   if (added) {
     save();
     renderTable();
+    renderFolders();
     bulkInputEl.value = '';
   }
 
@@ -690,6 +910,39 @@ function setIoStatus(msg, type = '') {
   ioStatusEl.className   = `io-status ${type}`;
 }
 
+// ─── collapsible sections ─────────────────────────────────────────────────────
+
+const SECTIONS_KEY = 'foxdye-collapsed-sections';
+const collapsedSections = new Set(JSON.parse(localStorage.getItem(SECTIONS_KEY) || '[]'));
+
+function applySectionCollapse() {
+  for (const sec of document.querySelectorAll('.section[id]')) {
+    sec.classList.toggle('section--collapsed', collapsedSections.has(sec.id));
+  }
+}
+
+function expandSection(id) {
+  if (!collapsedSections.has(id)) return;
+  collapsedSections.delete(id);
+  localStorage.setItem(SECTIONS_KEY, JSON.stringify([...collapsedSections]));
+  applySectionCollapse();
+}
+
+for (const sec of document.querySelectorAll('.section[id]')) {
+  const header = sec.querySelector('.section-header') ?? sec.querySelector('h2');
+  if (!header) continue;
+  header.classList.add('section-toggle');
+  header.title = 'Click to collapse / expand';
+  header.addEventListener('click', e => {
+    // don't collapse when a control inside the header is used
+    if (e.target.closest('button, input, select, a')) return;
+    collapsedSections.has(sec.id) ? collapsedSections.delete(sec.id) : collapsedSections.add(sec.id);
+    localStorage.setItem(SECTIONS_KEY, JSON.stringify([...collapsedSections]));
+    applySectionCollapse();
+  });
+}
+applySectionCollapse();
+
 // ─── theme ────────────────────────────────────────────────────────────────────
 
 const themeBtnEl = document.getElementById('themeToggle');
@@ -711,12 +964,23 @@ themeBtnEl.addEventListener('click', () => {
 
 // ─── init ─────────────────────────────────────────────────────────────────────
 
-browser.storage.local.get({ patterns: [], enabled: true, disabledSites: [] }).then(data => {
-  patterns      = data.patterns;
-  enabled       = data.enabled;
-  disabledSites = data.disabledSites;
-  masterToggleEl.checked = enabled;
+function renderAll() {
   renderTable();
-  renderSites();
+  renderFolders();
+  renderFolderSelects();
+  renderRules();
+}
+
+browser.storage.local.get({
+  patterns: [], enabled: true, folders: null, siteRules: null, disabledSites: []
+}).then(data => {
+  ensureSchema(data);   // normalize locally; background persists the migration
+  patterns  = data.patterns;
+  folders   = data.folders;
+  siteRules = data.siteRules;
+  enabled   = data.enabled;
+  masterToggleEl.checked = enabled;
+  renderAll();
+  renderRuleChecks();
   cpSetHex('#ff4d4d');
 });
