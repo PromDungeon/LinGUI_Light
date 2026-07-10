@@ -516,6 +516,13 @@ function onDelete(e) {
   renderPatterns();
 }
 
+// ─── preferences shortcut ─────────────────────────────────────────────────────
+
+document.getElementById('prefsBtn').addEventListener('click', () => {
+  browser.runtime.openOptionsPage();
+  window.close();
+});
+
 // ─── theme ────────────────────────────────────────────────────────────────────
 
 const themeBtnEl  = document.getElementById('themeToggle');

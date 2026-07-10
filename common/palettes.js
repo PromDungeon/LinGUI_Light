@@ -11,29 +11,45 @@
  * The currently selected palette name is remembered under `activePalette`.
  */
 
+/* IDE mainstay themes — each palette is the theme's canonical accent set. */
 const DEFAULT_PALETTES = [
   {
-    name: 'Classic',
+    name: 'Catppuccin',   // Mocha
     builtin: true,
-    colors: ['#ff4d4d', '#ff9f1a', '#ffd60a', '#4dd964', '#38c8a0', '#4da6ff', '#9b6bff', '#ff66c4']
+    colors: ['#f38ba8', '#fab387', '#f9e2af', '#a6e3a1', '#94e2d5', '#89b4fa', '#cba6f7', '#f5c2e7']
   },
   {
-    name: 'Neon',
+    name: 'Dracula',
     builtin: true,
-    colors: ['#39ff14', '#00f0ff', '#ff2079', '#ffea00', '#ff00ff', '#ff5f1f', '#7df9ff', '#ccff00']
+    colors: ['#ff5555', '#ffb86c', '#f1fa8c', '#50fa7b', '#8be9fd', '#bd93f9', '#ff79c6', '#6272a4']
   },
   {
-    name: 'Pastel',
+    name: 'Monokai',
     builtin: true,
-    colors: ['#ffb3ba', '#ffdfba', '#fff5ba', '#baffc9', '#bae1ff', '#e3baff', '#ffc9de', '#c9f0e8']
+    colors: ['#f92672', '#fd971f', '#e6db74', '#a6e22e', '#66d9ef', '#ae81ff', '#f8f8f2', '#75715e']
   },
   {
-    name: 'Earth',
+    name: 'Tokyo Night',
     builtin: true,
-    colors: ['#a0522d', '#8b5a2b', '#6b8e23', '#556b2f', '#b8860b', '#cd853f', '#8fbc8f', '#d2b48c']
+    colors: ['#f7768e', '#ff9e64', '#e0af68', '#9ece6a', '#73daca', '#7dcfff', '#7aa2f7', '#bb9af7']
   },
   {
-    // Okabe-Ito palette — distinguishable under common color-vision deficiencies
+    name: 'Gruvbox',
+    builtin: true,
+    colors: ['#fb4934', '#fe8019', '#fabd2f', '#b8bb26', '#8ec07c', '#83a598', '#d3869b', '#ebdbb2']
+  },
+  {
+    name: 'Material',
+    builtin: true,
+    colors: ['#ff5370', '#f78c6c', '#ffcb6b', '#c3e88d', '#89ddff', '#82aaff', '#c792ea', '#f07178']
+  },
+  {
+    name: 'Ayu',          // Mirage
+    builtin: true,
+    colors: ['#f28779', '#ffa759', '#ffd580', '#bae67e', '#95e6cb', '#73d0ff', '#d4bfff', '#f29e74']
+  },
+  {
+    // Okabe-Ito — distinguishable under common color-vision deficiencies
     name: 'Colorblind safe',
     builtin: true,
     colors: ['#e69f00', '#56b4e9', '#009e73', '#f0e442', '#0072b2', '#d55e00', '#cc79a7', '#999999']

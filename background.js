@@ -35,6 +35,11 @@ function createContextMenu() {
 browser.runtime.onInstalled.addListener(createContextMenu);
 browser.runtime.onStartup.addListener(createContextMenu);
 
+// The in-page picker's gear button asks us to open preferences
+browser.runtime.onMessage.addListener(msg => {
+  if (msg.type === 'tr-open-options') browser.runtime.openOptionsPage();
+});
+
 browser.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId !== 'tr-add-pattern') return;
   const text = info.selectionText?.trim();

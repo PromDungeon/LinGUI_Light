@@ -385,7 +385,9 @@ function showPicker(text) {
         margin-right: 6px;
         vertical-align: 2px;
       }
-      .close-btn {
+      .titlebar-btns { display: flex; align-items: center; gap: 6px; }
+      .close-btn,
+      .prefs-btn {
         background: none;
         border: none;
         cursor: pointer;
@@ -397,6 +399,8 @@ function showPicker(text) {
         transition: color 0.15s;
       }
       .close-btn:hover { color: #ff5c5c; }
+      .prefs-btn { font-size: 13px; }
+      .prefs-btn:hover { color: #ff7a2f; }
 
       .body { padding: 13px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
 
@@ -506,7 +510,10 @@ function showPicker(text) {
     <div class="card" id="card">
       <div class="titlebar">
         <span class="titlebar-text">Add to FoxDye</span>
-        <button class="close-btn" id="closeBtn" title="Close">×</button>
+        <span class="titlebar-btns">
+          <button class="prefs-btn" id="prefsBtn" title="Open preferences">⚙</button>
+          <button class="close-btn" id="closeBtn" title="Close">×</button>
+        </span>
       </div>
       <div class="body">
         <div class="preview" id="preview">${text.length > 60 ? text.slice(0, 60) + '…' : text}</div>
@@ -577,9 +584,14 @@ function showPicker(text) {
     }
   });
 
-  // ── close / cancel ─────────────────────────────────────────────────────────
+  // ── close / cancel / preferences ───────────────────────────────────────────
   shadow.getElementById('closeBtn').addEventListener('click', removePicker);
   shadow.getElementById('cancelBtn').addEventListener('click', removePicker);
+  shadow.getElementById('prefsBtn').addEventListener('click', () => {
+    // content scripts can't call openOptionsPage — the background does it
+    browser.runtime.sendMessage({ type: 'tr-open-options' });
+    removePicker();
+  });
 
   // ── add button ─────────────────────────────────────────────────────────────
   shadow.getElementById('addBtn').addEventListener('click', () => {
