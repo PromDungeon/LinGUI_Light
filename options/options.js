@@ -465,7 +465,8 @@ importFileEl.addEventListener('change', e => {
         wholeWord:     !!p.wholeWord,
         isRegex:       !!p.isRegex,
         enabled:       p.enabled !== false,
-        folderId:      knownFolders.has(p.folderId) ? p.folderId : GENERAL_FOLDER_ID
+        folderId:      knownFolders.has(p.folderId) ? p.folderId : GENERAL_FOLDER_ID,
+        ...(typeof p.packId === 'string' ? { packId: p.packId } : {})
       }));
 
       if (!valid.length && !foldersAdded && !rulesAdded) throw new Error('No valid patterns found.');
@@ -858,6 +859,134 @@ bulkFormEl.addEventListener('submit', e => {
   showToast(parts.join(', ') + '.');
 });
 
+// ─── starter packs ────────────────────────────────────────────────────────────
+
+const packListEl = document.getElementById('packList');
+
+function installPack(pack) {
+  // Reuse a folder with the pack's name, or create one
+  let folder = folders.find(f => f.name.toLowerCase() === pack.name.toLowerCase());
+  if (!folder) {
+    folder = { id: nextId(), name: pack.name, enabled: true };
+    folders.push(folder);
+  }
+
+  // Idempotent: skip entries this pack already installed (by text)
+  const installed = new Set(patterns.filter(p => p.packId === pack.id).map(p => p.text));
+  let added = 0;
+  for (const entry of pack.patterns) {
+    if (installed.has(entry.text)) continue;
+    patterns.push({
+      id:            nextId(),
+      text:          entry.text,
+      color:         entry.color,
+      caseSensitive: entry.caseSensitive,
+      wholeWord:     entry.wholeWord,
+      isRegex:       entry.isRegex,
+      enabled:       true,
+      folderId:      folder.id,
+      packId:        pack.id
+    });
+    added++;
+  }
+
+  save();
+  renderAll();
+  showToast(added
+    ? `"${pack.name}" installed — ${added} pattern${added !== 1 ? 's' : ''} added.`
+    : `"${pack.name}" was already fully installed.`);
+}
+
+function removePack(pack) {
+  const removedFolderIds = new Set(
+    patterns.filter(p => p.packId === pack.id).map(p => p.folderId)
+  );
+  patterns = patterns.filter(p => p.packId !== pack.id);
+
+  // Drop folders the pack used that are now empty (never General)
+  for (const fid of removedFolderIds) {
+    if (fid === GENERAL_FOLDER_ID) continue;
+    if (patterns.some(p => p.folderId === fid)) continue;
+    folders = folders.filter(f => f.id !== fid);
+    for (const r of siteRules) r.folders = r.folders.filter(id => id !== fid);
+  }
+
+  save();
+  renderAll();
+  showToast(`"${pack.name}" removed.`);
+}
+
+function renderPacks() {
+  packListEl.innerHTML = '';
+
+  for (const pack of STARTER_PACKS) {
+    const installedCount = patterns.filter(p => p.packId === pack.id).length;
+
+    const row = document.createElement('div');
+    row.className = 'pack-row';
+
+    const info = document.createElement('div');
+    info.className = 'pack-info';
+
+    const title = document.createElement('div');
+    title.className = 'pack-title';
+    title.textContent = pack.name;
+    if (installedCount) {
+      const badge = document.createElement('span');
+      badge.className = 'pack-installed';
+      badge.textContent = `${installedCount}/${pack.patterns.length} installed`;
+      title.appendChild(badge);
+    }
+
+    const desc = document.createElement('div');
+    desc.className = 'pack-desc';
+    desc.textContent = pack.description;
+
+    const preview = document.createElement('div');
+    preview.className = 'pack-preview';
+    for (const entry of pack.patterns.slice(0, 6)) {
+      const chip = document.createElement('span');
+      chip.className = 'pack-chip';
+      chip.style.color = entry.color;
+      chip.textContent = entry.isRegex ? 'regex' : entry.text;
+      chip.title = entry.text;
+      preview.appendChild(chip);
+    }
+    if (pack.patterns.length > 6) {
+      const more = document.createElement('span');
+      more.className = 'pack-chip pack-chip-more';
+      more.textContent = `+${pack.patterns.length - 6}`;
+      preview.appendChild(more);
+    }
+
+    info.append(title, desc, preview);
+
+    const actions = document.createElement('div');
+    actions.className = 'pack-actions';
+
+    const installBtn = document.createElement('button');
+    installBtn.className = 'btn btn--primary';
+    installBtn.textContent = installedCount ? 'Reinstall' : 'Install';
+    installBtn.title = installedCount
+      ? 'Re-add any patterns from this pack you deleted'
+      : `Install into a "${pack.name}" folder`;
+    installBtn.addEventListener('click', () => installPack(pack));
+    actions.appendChild(installBtn);
+
+    if (installedCount) {
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'btn btn--ghost';
+      removeBtn.textContent = 'Remove';
+      removeBtn.title = 'Remove the patterns this pack installed';
+      removeBtn.addEventListener('click', () => removePack(pack));
+      actions.appendChild(removeBtn);
+    }
+
+    row.append(info, actions);
+    packListEl.appendChild(row);
+  }
+}
+
 // ─── palette import ───────────────────────────────────────────────────────────
 
 const importPaletteEl = document.getElementById('importPaletteFile');
@@ -969,6 +1098,7 @@ function renderAll() {
   renderFolders();
   renderFolderSelects();
   renderRules();
+  renderPacks();
 }
 
 browser.storage.local.get({
